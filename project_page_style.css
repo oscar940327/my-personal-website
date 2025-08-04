@@ -1,0 +1,105 @@
+/* ==================== Reset and Basic Styles ==================== */
+body {
+    margin: 0;
+    padding: 0;
+    background-color: rgb(239, 239, 239);
+    font-family: 'Poppins', 'Plus Jakarta Sans', Arial, sans-serif;
+}
+
+/* ==================== Gray Line ==================== */
+.gray {
+    height: 5px;
+    background-color: rgb(230, 230, 230);
+}
+
+
+.projects-container{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 32px;
+    margin: 30px auto;
+    max-width: 1050px;
+}
+
+.project{
+    background-color: white;
+    width: calc(33.33% - 32px);
+    min-width: 280px;            
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 15px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.project:hover{
+    transform: translateY(-3px) scale(1.03);
+}
+
+.project img{
+    border-radius: 15px 15px 0 0;
+    width: 100%;
+    height: 200px;
+    box-sizing: border-box;
+}
+
+.project-title{
+    font-size: 1.2em;
+    font-weight: 700;
+    padding: 16px 20px 0 20px;
+    color: #3c3c3c;
+}
+
+.project-introduction{
+    padding: 10px 20px;
+    font-size: 0.98em;
+    color: #555;
+    margin: 0;
+}
+
+.project-introduction li{
+    margin-bottom: 12px;
+    margin-left: 12px;
+    line-height: 1.3;
+}
+
+.project-introduction a{
+    color: #222;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s, text-decoration 0.2s;
+}
+
+.project-introduction a:hover{
+    color: #0366d6;
+    text-decoration: underline;
+}
+
+.project-btn-container{
+    padding: 16px 20px 20px 20px ;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.project-btn-container a{
+    text-decoration: none;
+}
+
+.link-btn{
+    background: #24292f;
+    color: white;
+    padding: 8px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: 2px solid #24292f;
+}
+
+.link-btn:hover{
+    background-color: white;
+    color: #24292f;
+    border: 2px solid #24292f;
+}

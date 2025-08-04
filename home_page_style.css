@@ -1,0 +1,341 @@
+/* ==================== Reset and Basic Styles ==================== */
+body {
+    margin: 0;
+    padding: 0;
+    background-color: rgb(239, 239, 239);
+    font-family: 'Poppins', 'Plus Jakarta Sans', Arial, sans-serif;
+}
+
+/* ==================== Gray Line ==================== */
+.gray {
+    height: 5px;
+    background-color: rgb(230, 230, 230);
+}
+
+/* ==================== Self Intro Section ==================== */
+.self-intro {
+    width: 65%;
+    /* max-width: ; */
+    /* min-width: ; */
+    margin: 20px auto;
+    margin-top: 30px;
+    padding-left: 30px;
+    padding-bottom: 20px;
+    background-color: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    align-items: stretch;
+    position: relative;
+    overflow: hidden;
+}
+
+.context {
+    flex-grow: 1;
+    /* 讓文字內容佔據剩餘大部分空間 */
+    width: 70%;
+    text-align: left;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-right: 20px;
+    padding-top: 30px;
+}
+
+.education {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: rgb(49, 49, 49);
+    margin-bottom: 10px;
+}
+
+.slogan {
+    font-size: 1.9em;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+.introduction {
+    font-size: 1.1em;
+    margin-bottom: 30px;
+}
+
+.button-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 15px;
+}
+
+.button-container a {
+    text-decoration: none;
+    display: flex;
+}
+
+.project-button,
+.resume-button {
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    white-space: nowrap;
+    /* 防止按鈕文字換行 */
+    transition: all 0.2s ease-out;
+    /* 統一過度效果 */
+}
+
+.project-button {
+    background-color: #000000;
+    color: white;
+}
+
+.project-button:hover {
+    background-color: rgb(66, 66, 66);
+}
+
+.resume-button {
+    background-color: white;
+    border: 2px solid black;
+}
+
+.resume-button:hover {
+    background-color: black;
+    color: white;
+}
+
+/* ==================== Selfie and Contact Section (Fixes applied here) ==================== */
+.selfie-and-contact {
+    width: 35%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+}
+
+.profile-picture-mobile {
+    display: none;
+}
+
+.profile-picture-desktop {
+    height: 80%;
+    display: block;
+}
+
+.profile-picture-desktop img {
+    width: 100%;
+    height: 100%;
+    border-radius: 15px;
+}
+
+.contact-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.contact-icons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.contact-icons a {
+    display: flex;
+    align-items: center;
+}
+
+.contact-icons img {
+    width: 50px;
+    height: 50px;
+    transition: transform 0.2s ease-out;
+}
+
+.contact-icons img:hover {
+    transform: translateY(-3px) scale(1.05);
+    /* 璇庭時圖標輕微上浮 */
+}
+
+.email-text {
+    font-size: 1em;
+    text-align: center;
+    word-break: break-all;
+}
+
+.experience-heading {
+    text-align: center;
+    font-size: 40px;
+    color: rgb(54, 54, 54);
+}
+
+.ncue-experience {
+    width: 63%;
+    background-color: white;
+    border-radius: 15px;
+    padding: 30px;
+    margin: 20px auto;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    gap: 5px;
+}
+
+.ncue-experience-title {
+    font-size: 1.5em;
+}
+
+.ncue-experience-period {
+    margin-top: 20px;
+    font-size: 1.2em;
+}
+
+.ncue-experience-detail{
+    font-size: 1.1em;
+}
+
+/* 平板 */
+@media (max-width: 1250px) {
+
+    .self-intro {
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        box-sizing: border-box;
+        margin-top: 20px;
+        gap: 0;
+        padding: 20px;
+    }
+
+    .education {
+        font-size: 1.1em;
+    }
+
+    .slogan {
+        font-size: 1.5em;
+    }
+
+    .introduction {
+        font-size: 0.9em;
+    }
+
+    .contact-info {
+        margin-top: 45px;
+    }
+
+    .profile-picture-desktop {
+        display: none;
+    }
+
+    .profile-picture-mobile {
+        display: block;
+
+    }
+
+    .profile-picture-mobile img {
+        width: 100%;
+        height: 100%;
+        border-radius: 99em;
+        border: 5px solid white;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .ncue-experience {
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        box-sizing: border-box;
+        padding: 20px;
+    }
+
+    .ncue-experience-title{
+        font-size: 1.3em;
+    }
+
+    .ncue-experience-period{
+        font-size: 1.0em;
+    }
+    .ncue-experience-detail{
+        font-size: 0.9em;
+    }
+
+}
+
+/* 手機 */
+@media (max-width: 850px) {
+    .self-intro{
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        box-sizing: border-box;
+        margin-top: 20px;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .selfie-and-contact{
+        width: 60%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+    }
+
+    .context{
+        width: 100%;
+        padding: 10px;
+        margin: 0;
+        gap: 8px;
+        text-align: center;
+    }
+
+    .education{
+        font-size: 1.1em;
+        margin-bottom: 5px;
+    }
+
+    .slogan{
+        font-size: 1.3em;
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+
+    .introduction{
+        font-size: 0.95em;
+        margin-bottom: 10px;
+    }
+
+    .button-container{
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .project-button,
+    .resume-button{
+        width: 60vw;
+        font-size: 1em;
+        padding: 10px 0;
+    }
+
+    .contact-info{
+        margin-top: 10px;
+    }
+
+    .email-text{
+        font-size: 0.95em;
+    }
+
+    .ncue-experience{
+        padding: 20px;
+        margin-top: 15px;
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        box-sizing: border-box;
+    }
+
+    .ncue-experience-period{
+        margin-top: 10px;
+    }
+}
