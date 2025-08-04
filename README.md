@@ -1,7 +1,9 @@
-# [Oscar's Personal Website](https://oscar940327.github.io/my-personal-website/)
+# Oscar's Personal Website
 
 ## 介紹
 這是一個由 Oscar Cheng 製作的個人網站，展示了我的自我介紹、作品集、學習歷程與時間軸。網站採用現代化設計，支援桌機與手機瀏覽，並整合了多種前端技術。
+
+網頁展示：https://oscar940327.github.io/my-personal-website/
 
 ## 網站結構
 
