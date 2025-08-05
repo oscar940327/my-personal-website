@@ -7,7 +7,23 @@ body {
     font-family: 'Poppins', 'Plus Jakarta Sans', Arial, sans-serif;
 }
 
-body::-webkit-scrollbar {         /* Chrome, Safari, Edge */
+/* 讓 html 和 body 隱藏捲軸，確保全域生效 */
+html, body {
+    /* 避免捲軸出現 */
+    overflow-x: hidden;
+    overflow-y: scroll;
+}
+
+/* 適用於 WebKit 瀏覽器 (Chrome, Safari, Edge) */
+html::-webkit-scrollbar, body::-webkit-scrollbar {
+    width: 0;
+    background: transparent;
+}
+html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+/* 簡潔的 WebKit 隱藏方法 */
+html::-webkit-scrollbar, body::-webkit-scrollbar {
     display: none;
 }
 
