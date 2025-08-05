@@ -7,6 +7,10 @@ body {
     font-family: 'Poppins', 'Plus Jakarta Sans', Arial, sans-serif;
 }
 
+body::-webkit-scrollbar {         /* Chrome, Safari, Edge */
+    display: none;
+}
+
 /* ==================== Gray Line ==================== */
 .gray {
     height: 5px;
