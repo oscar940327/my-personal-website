@@ -102,6 +102,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
     padding: 16px 20px 20px 20px ;
     display: flex;
     justify-content: flex-start;
+    gap: 10px;
 }
 
 .project-btn-container a{
