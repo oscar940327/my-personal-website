@@ -99,6 +99,11 @@ html, body {
     display: flex;
 }
 
+.button-container a:visited {
+    color: inherit;
+    text-decoration: none;
+}
+
 .project-button,
 .resume-button {
     padding: 5px 10px;
@@ -123,6 +128,7 @@ html, body {
 .resume-button {
     background-color: white;
     border: 2px solid black;
+    color: black; 
 }
 
 .resume-button:hover {
