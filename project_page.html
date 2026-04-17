@@ -22,6 +22,36 @@
     <div id="header-placeholder"></div>
 
     <div class="projects-container">
+        <!-- Market Analyst -->
+        <div class="project">
+            <img src="images/market-analyst.png" alt="market-analyst">
+
+            <div class="project-title"></div>
+
+            <ul class="project-introduction">
+                <li>Developed an <b>end-to-end trading signal system</b> for US equities,
+                    from data ingestion to daily HTML email reports.</li>
+                <li>Integrated <b>5 external APIs</b> (yfinance, Polygon, Tavily, OpenRouter, Gmail)
+                    with <b>SQLite</b> storage and <b>Backtrader</b> backtesting engine.</li>
+                <li>Implemented a <b>hybrid sentiment engine</b>: <b>FinBERT</b> (deterministic) for
+                    historical backfill, <b>DeepSeek V3 LLM</b> for daily reports with human-readable reasoning.</li>
+                <li>Designed and tested <b>3 trading strategies</b> (pure technical / sentiment-filtered /
+                    regime-aware) through rigorous <b>4-year cross-bear-market backtesting</b> on 14 stocks.</li>
+                <li>Key finding: LLM sentiment filtering <b>reduced returns by 37.65%</b> vs baseline —
+                    led to a data-driven design pivot, consistent with findings in
+                    <b>FINSABER (Liu et al., 2025)</b>.
+                </li>
+                <li>Built a <b>6-dimension composite scoring system</b> (trend / bias / volume / support / MACD / RSI)
+                    with automated <b>entry/stop-loss/target price calculation</b>.</li>
+            </ul>
+
+            <div class="project-btn-container">
+                <a href="https://github.com/oscar940327/personal-market-analysis" target="_blank">
+                    <div class="link-btn">Github</div>
+                </a>
+            </div>
+        </div>
+
         <!-- 購物網站 -->
         <div class="project">
             <img src="images/ecommerce_display.png" alt="ecommerce-website">
@@ -67,7 +97,7 @@
             </ul>
 
             <div class="project-btn-container">
-                <a href="https://github.com/oscar940327/CodeCapital"  target="_blank">
+                <a href="https://github.com/oscar940327/CodeCapital" target="_blank">
                     <div class="link-btn">Github</div>
                 </a>
             </div>
@@ -75,23 +105,30 @@
 
         <!-- AI Financial Supply Chain Risk Knowledge Graph -->
         <div class="project">
-            <img src="images/ai-financial-supply-chain-risk-knowledge-graph.png" alt="AI Financial Supply Chain Risk Knowledge Graph">
+            <img src="images/ai-financial-supply-chain-risk-knowledge-graph.png"
+                alt="AI Financial Supply Chain Risk Knowledge Graph">
 
             <div class="project-title">AI Financial Supply Chain Risk Knowledge Graph</div>
 
             <ul class="project-introduction">
-                <li>A fully automated <b>AI Financial Supply Chain Risk Analysis System</b> designed for rapid market insights.</li>
-                <li>Powered by advanced <b>Large Language Models (GPT-4o/5.2)</b> to extract complex entity-relation triples from real-time financial news.</li>
-                <li>Enhanced with a custom <b>Auto-Verifier</b> to eliminate AI hallucinations and a quantitative <b>Market Sentiment Analyzer</b>.</li>
-                <li>Generates highly interactive <b>Knowledge Graphs</b> with dynamic sentiment watermarks for intuitive visual analysis.</li>
-                <li>Offers a seamless user experience through a <b>Streamlit Web App</b>, enabling one-click execution via stock tickers.</li>
+                <li>A fully automated <b>AI Financial Supply Chain Risk Analysis System</b> designed for rapid market
+                    insights.</li>
+                <li>Powered by advanced <b>Large Language Models (GPT-4o/5.2)</b> to extract complex entity-relation
+                    triples from real-time financial news.</li>
+                <li>Enhanced with a custom <b>Auto-Verifier</b> to eliminate AI hallucinations and a quantitative
+                    <b>Market Sentiment Analyzer</b>.</li>
+                <li>Generates highly interactive <b>Knowledge Graphs</b> with dynamic sentiment watermarks for intuitive
+                    visual analysis.</li>
+                <li>Offers a seamless user experience through a <b>Streamlit Web App</b>, enabling one-click execution
+                    via stock tickers.</li>
             </ul>
 
             <div class="project-btn-container">
-                <a href="https://oscar940327-ai-financial-supply-chain-risk-knowle-srcapp-zuftdi.streamlit.app/"  target="_blank">
+                <a href="https://oscar940327-ai-financial-supply-chain-risk-knowle-srcapp-zuftdi.streamlit.app/"
+                    target="_blank">
                     <div class="link-btn">Demo</div>
                 </a>
-                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/"  target="_blank">
+                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/" target="_blank">
                     <div class="link-btn">Github</div>
                 </a>
             </div>
@@ -104,18 +141,23 @@
             <div class="project-title">AI Learning Path Generator</div>
 
             <ul class="project-introduction">
-                <li>A dynamic <b>AI-Driven Learning Path Generator</b> designed to solve the cognitive cold-start problem for any unknown technical or theoretical domain.</li>
-                <li>Powered by <b>Large Language Models (GPT-5.2)</b> and <b>Pydantic Structured Output</b> to strictly decompose complex topics into granular, dependency-mapped learning nodes.</li>
-                <li>Enhanced with a robust <b>Graph Validation Engine (NetworkX)</b> to construct Directed Acyclic Graphs (DAGs), actively detecting and resolving circular dependencies.</li>
-                <li>Integrates a custom <b>Semantic Reranking Pipeline</b> using vector embeddings and Cosine Similarity to fetch and rank the most relevant tutorial videos via the YouTube Data API.</li>
-                <li>Delivers an interactive user experience through a <b>Streamlit Web App</b>, featuring zoomable <b>Mermaid.js</b> topology maps, dynamic level calculation, and API caching.</li>
+                <li>A dynamic <b>AI-Driven Learning Path Generator</b> designed to solve the cognitive cold-start
+                    problem for any unknown technical or theoretical domain.</li>
+                <li>Powered by <b>Large Language Models (GPT-5.2)</b> and <b>Pydantic Structured Output</b> to strictly
+                    decompose complex topics into granular, dependency-mapped learning nodes.</li>
+                <li>Enhanced with a robust <b>Graph Validation Engine (NetworkX)</b> to construct Directed Acyclic
+                    Graphs (DAGs), actively detecting and resolving circular dependencies.</li>
+                <li>Integrates a custom <b>Semantic Reranking Pipeline</b> using vector embeddings and Cosine Similarity
+                    to fetch and rank the most relevant tutorial videos via the YouTube Data API.</li>
+                <li>Delivers an interactive user experience through a <b>Streamlit Web App</b>, featuring zoomable
+                    <b>Mermaid.js</b> topology maps, dynamic level calculation, and API caching.</li>
             </ul>
 
             <div class="project-btn-container">
-                <a href="https://ai-learning-path-generator-jv5oh38cnvq3htwx6xkarb.streamlit.app/"  target="_blank">
+                <a href="https://ai-learning-path-generator-jv5oh38cnvq3htwx6xkarb.streamlit.app/" target="_blank">
                     <div class="link-btn">Demo</div>
                 </a>
-                <a href="https://github.com/oscar940327/AI-Learning-Path-Generator.git"  target="_blank">
+                <a href="https://github.com/oscar940327/AI-Learning-Path-Generator.git" target="_blank">
                     <div class="link-btn">Github</div>
                 </a>
             </div>
@@ -128,18 +170,27 @@
             <div class="project-title">RAG Financial Report Analysis</div>
 
             <ul class="project-introduction">
-                <li>Architected a <b>Two-Stage Retrieval-Augmented Generation (RAG)</b> pipeline to overcome semantic retrieval ceilings, parsing and analyzing 100+ page financial reports (e.g., Tesla, Palantir).</li>
-                <li>Integrated a <b>Cross-Encoder Reranking Engine</b> (<code>sentence-transformers</code>) to evaluate context relevance, significantly improving retrieval precision for dense financial formulas and risk factors.</li>
-                <li>Developed an automated <b>Standalone Query Generator</b> via LLMs(GPT-5.4) to handle multi-turn contextual memory and cross-lingual queries, dynamically resolving pronouns and eliminating vector search noise.</li>
-                <li>Built a robust <b>Streamlit Web App</b> featuring multi-dataset state management, utilizing strict callback triggers to seamlessly switch between corporate databases without memory cross-contamination.</li>
-                <li>Enforced strict <b>Anti-Hallucination Mechanisms</b> through closed-book prompting, ensuring all generated analyses are strictly grounded in retrieved corporate data with zero data fabrication.</li>
+                <li>Architected a <b>Two-Stage Retrieval-Augmented Generation (RAG)</b> pipeline to overcome semantic
+                    retrieval ceilings, parsing and analyzing 100+ page financial reports (e.g., Tesla, Palantir).</li>
+                <li>Integrated a <b>Cross-Encoder Reranking Engine</b> (<code>sentence-transformers</code>) to evaluate
+                    context relevance, significantly improving retrieval precision for dense financial formulas and risk
+                    factors.</li>
+                <li>Developed an automated <b>Standalone Query Generator</b> via LLMs(GPT-5.4) to handle multi-turn
+                    contextual memory and cross-lingual queries, dynamically resolving pronouns and eliminating vector
+                    search noise.</li>
+                <li>Built a robust <b>Streamlit Web App</b> featuring multi-dataset state management, utilizing strict
+                    callback triggers to seamlessly switch between corporate databases without memory
+                    cross-contamination.</li>
+                <li>Enforced strict <b>Anti-Hallucination Mechanisms</b> through closed-book prompting, ensuring all
+                    generated analyses are strictly grounded in retrieved corporate data with zero data fabrication.
+                </li>
             </ul>
 
             <div class="project-btn-container">
-                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/"  target="_blank">
+                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/" target="_blank">
                     <div class="link-btn">Demo</div>
                 </a>
-                <a href="https://github.com/oscar940327/RAG-Financial-Report-Analysis.git"  target="_blank">
+                <a href="https://github.com/oscar940327/RAG-Financial-Report-Analysis.git" target="_blank">
                     <div class="link-btn">Github</div>
                 </a>
             </div>
@@ -161,7 +212,7 @@
             </ul>
 
             <div class="project-btn-container">
-                <a href="https://hackmd.io/@RPGoscar"  target="_blank">
+                <a href="https://hackmd.io/@RPGoscar" target="_blank">
                     <div class="link-btn">HackMD</div>
                 </a>
             </div>
