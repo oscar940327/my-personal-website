@@ -32,6 +32,11 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
     background-color: rgb(230, 230, 230);
 }
 
+.experience-heading{
+    text-align: center;
+    font-size: 40px;
+    color: rgb(54, 54, 54);
+}
 
 .projects-container{
     display: flex;

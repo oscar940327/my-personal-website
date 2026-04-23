@@ -21,39 +21,9 @@
 <body>
     <div id="header-placeholder"></div>
 
+    <div class="experience-heading">- Featured Project -</div>
+
     <div class="projects-container">
-        <!-- Market Analyst -->
-        <div class="project">
-            <img src="images/market-analyst.png" alt="market-analyst">
-
-            <div class="project-title"></div>
-
-            <ul class="project-introduction">
-                <li>Developed an <b>end-to-end trading signal system</b> for US equities,
-                    from data ingestion to daily HTML email reports.</li>
-                <li>Integrated <b>5 external APIs</b> (yfinance, Polygon, Tavily, OpenRouter, Gmail)
-                    with <b>SQLite</b> storage and <b>Backtrader</b> backtesting engine.</li>
-                <li>Implemented a <b>hybrid sentiment engine</b>: <b>FinBERT</b> (deterministic) for
-                    historical backfill, <b>DeepSeek V3 LLM</b> for daily reports with human-readable reasoning.</li>
-                <li>Designed and tested <b>3 trading strategies</b> (pure technical / sentiment-filtered /
-                    regime-aware) through rigorous <b>4-year cross-bear-market backtesting</b> on 14 stocks.</li>
-                <li>Key finding: LLM sentiment filtering <b>reduced returns by 37.65%</b> vs baseline —
-                    led to a data-driven design pivot, consistent with findings in
-                    <b>FINSABER (Liu et al., 2025)</b>.
-                </li>
-                <li>Built a <b>6-dimension composite scoring system</b> (trend / bias / volume / support / MACD / RSI)
-                    with automated <b>entry/stop-loss/target price calculation</b>.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://github.com/oscar940327/oscar-market-analyst" target="_blank">
-                    <div class="link-btn">Github</div>
-                </a>
-                <a href="https://oscar940327.github.io/personal-market-analysis/" target="_blank">
-                    <div class="link-btn">Live DashBoard</div>
-                </a>
-            </div>
-        </div>
 
         <!-- 購物網站 -->
         <div class="project">
@@ -79,6 +49,99 @@
             <div class="project-btn-container">
                 <a href="https://youtu.be/VJzby64Ukl0" target="_blank">
                     <div class="link-btn">Demo</div>
+                </a>
+            </div>
+        </div>
+
+        <!-- RAG Financial Report Analysis -->
+        <div class="project">
+            <img src="images/rag-financial-report-analysis.png" alt="RAG Financial Report Analysis">
+
+            <div class="project-title">RAG Financial Report Analysis</div>
+
+            <ul class="project-introduction">
+                <li>Architected a <b>Two-Stage Retrieval-Augmented Generation (RAG)</b> pipeline to overcome semantic
+                    retrieval ceilings, parsing and analyzing 100+ page financial reports (e.g., Tesla, Palantir).</li>
+                <li>Integrated a <b>Cross-Encoder Reranking Engine</b> (<code>sentence-transformers</code>) to evaluate
+                    context relevance, significantly improving retrieval precision for dense financial formulas and risk
+                    factors.</li>
+                <li>Developed an automated <b>Standalone Query Generator</b> via LLMs(GPT-5.4) to handle multi-turn
+                    contextual memory and cross-lingual queries, dynamically resolving pronouns and eliminating vector
+                    search noise.</li>
+                <li>Built a robust <b>Streamlit Web App</b> featuring multi-dataset state management, utilizing strict
+                    callback triggers to seamlessly switch between corporate databases without memory
+                    cross-contamination.</li>
+                <li>Enforced strict <b>Anti-Hallucination Mechanisms</b> through closed-book prompting, ensuring all
+                    generated analyses are strictly grounded in retrieved corporate data with zero data fabrication.
+                </li>
+            </ul>
+
+            <div class="project-btn-container">
+                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/" target="_blank">
+                    <div class="link-btn">Demo</div>
+                </a>
+                <a href="https://github.com/oscar940327/RAG-Financial-Report-Analysis.git" target="_blank">
+                    <div class="link-btn">Github</div>
+                </a>
+            </div>
+        </div>
+
+        <!-- HackMD-->
+        <div class="project">
+            <img src="images/hackmd.jpg" alt="HackMD">
+
+            <div class="project-title">My Digital Notes</div>
+
+            <ul class="project-introduction">
+                <li><b>Programming Language Notes:</b> A collection of my learning journey, code snippets, and insights
+                    into various programming concepts and practices.</li>
+                <li><b>Stock Market Knowledge:</b> My detailed observations, analyses, and strategies on investing,
+                    market trends, and financial literacy.</li>
+                <li><b>Travel Records:</b> Personal chronicles and reflections from my explorations around the world,
+                    including itineraries, experiences, and cultural insights.</li>
+            </ul>
+
+            <div class="project-btn-container">
+                <a href="https://hackmd.io/@RPGoscar" target="_blank">
+                    <div class="link-btn">HackMD</div>
+                </a>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="experience-heading">- Vibe Coded -</div>
+
+    <div class="projects-container">
+        <!-- Market Analyst -->
+        <div class="project">
+            <img src="images/market-analyst.png" alt="market-analyst">
+
+            <div class="project-title">Oscar Market Analyst</div>
+
+            <ul class="project-introduction">
+                <li>Developed an <b>end-to-end trading signal system</b> for US equities,
+                    from data ingestion to daily HTML email reports.</li>
+                <li>Integrated <b>5 external APIs</b> (yfinance, Polygon, Tavily, OpenRouter, Gmail)
+                    with <b>SQLite</b> storage and <b>Backtrader</b> backtesting engine.</li>
+                <li>Implemented a <b>hybrid sentiment engine</b>: <b>FinBERT</b> (deterministic) for
+                    historical backfill, <b>DeepSeek V3 LLM</b> for daily reports with human-readable reasoning.</li>
+                <li>Designed and tested <b>3 trading strategies</b> (pure technical / sentiment-filtered /
+                    regime-aware) through rigorous <b>4-year cross-bear-market backtesting</b> on 14 stocks.</li>
+                <li>Key finding: LLM sentiment filtering <b>reduced returns by 37.65%</b> vs baseline —
+                    led to a data-driven design pivot, consistent with findings in
+                    <b>FINSABER (Liu et al., 2025)</b>.
+                </li>
+                <li>Built a <b>6-dimension composite scoring system</b> (trend / bias / volume / support / MACD / RSI)
+                    with automated <b>entry/stop-loss/target price calculation</b>.</li>
+            </ul>
+
+            <div class="project-btn-container">
+                <a href="https://github.com/oscar940327/oscar-market-analyst" target="_blank">
+                    <div class="link-btn">Github</div>
+                </a>
+                <a href="https://oscar940327.github.io/personal-market-analysis/" target="_blank">
+                    <div class="link-btn">Live DashBoard</div>
                 </a>
             </div>
         </div>
@@ -163,63 +226,6 @@
                 <a href="https://github.com/oscar940327/AI-Learning-Path-Generator.git" target="_blank">
                     <div class="link-btn">Github</div>
                 </a>
-            </div>
-        </div>
-
-        <!-- RAG Financial Report Analysis -->
-        <div class="project">
-            <img src="images/rag-financial-report-analysis.png" alt="RAG Financial Report Analysis">
-
-            <div class="project-title">RAG Financial Report Analysis</div>
-
-            <ul class="project-introduction">
-                <li>Architected a <b>Two-Stage Retrieval-Augmented Generation (RAG)</b> pipeline to overcome semantic
-                    retrieval ceilings, parsing and analyzing 100+ page financial reports (e.g., Tesla, Palantir).</li>
-                <li>Integrated a <b>Cross-Encoder Reranking Engine</b> (<code>sentence-transformers</code>) to evaluate
-                    context relevance, significantly improving retrieval precision for dense financial formulas and risk
-                    factors.</li>
-                <li>Developed an automated <b>Standalone Query Generator</b> via LLMs(GPT-5.4) to handle multi-turn
-                    contextual memory and cross-lingual queries, dynamically resolving pronouns and eliminating vector
-                    search noise.</li>
-                <li>Built a robust <b>Streamlit Web App</b> featuring multi-dataset state management, utilizing strict
-                    callback triggers to seamlessly switch between corporate databases without memory
-                    cross-contamination.</li>
-                <li>Enforced strict <b>Anti-Hallucination Mechanisms</b> through closed-book prompting, ensuring all
-                    generated analyses are strictly grounded in retrieved corporate data with zero data fabrication.
-                </li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/" target="_blank">
-                    <div class="link-btn">Demo</div>
-                </a>
-                <a href="https://github.com/oscar940327/RAG-Financial-Report-Analysis.git" target="_blank">
-                    <div class="link-btn">Github</div>
-                </a>
-            </div>
-        </div>
-
-        <!-- HackMD-->
-        <div class="project">
-            <img src="images/hackmd.jpg" alt="HackMD">
-
-            <div class="project-title">My Digital Notes</div>
-
-            <ul class="project-introduction">
-                <li><b>Programming Language Notes:</b> A collection of my learning journey, code snippets, and insights
-                    into various programming concepts and practices.</li>
-                <li><b>Stock Market Knowledge:</b> My detailed observations, analyses, and strategies on investing,
-                    market trends, and financial literacy.</li>
-                <li><b>Travel Records:</b> Personal chronicles and reflections from my explorations around the world,
-                    including itineraries, experiences, and cultural insights.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://hackmd.io/@RPGoscar" target="_blank">
-                    <div class="link-btn">HackMD</div>
-                </a>
-            </div>
-        </div>
     </div>
 
     <script src="header-placeholder.js" defer></script>
