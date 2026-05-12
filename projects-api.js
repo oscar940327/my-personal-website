@@ -23,14 +23,14 @@ async function loadProjectsFromAPI(){
 
             <ul class="project-introduction">
                 <li>${project.description}</li>
-                <li><strong>Skills:</strong>${project.skill}</li>
+                <li><strong>Skills: </strong>${project.skill}</li>
             </ul>
             `;
 
             projectsList.appendChild(projectCard);
         });
     } catch (error){
-        projectsList.innerHTML = "<p>Failde to load projects. Please try again later.</p>";
+        projectsList.innerHTML = "<p>Failed to load projects. Please try again later.</p>";
         console.error(error);
     }
 }
