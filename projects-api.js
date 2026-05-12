@@ -4,6 +4,8 @@ async function loadProjectsFromAPI(){
     const projectsList = document.getElementById("api-projects-list");
 
     try{
+        projectsList.innerHTML = "<p>Loading projects...</p>";
+
         const response = await fetch(`${API_BASE_URL}/projects/`);
 
         if(!response.ok){
@@ -13,6 +15,11 @@ async function loadProjectsFromAPI(){
         const projects = await response.json();
 
         projectsList.innerHTML = "";
+
+        if (projects.length === 0){
+            projectsList.innerHTML = "<p>No projects available.</p>";
+            return;
+        }
 
         projects.forEach((project) => {
             const projectCard = document.createElement("div");
