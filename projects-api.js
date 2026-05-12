@@ -4,7 +4,7 @@ async function loadProjectsFromAPI(){
     const projectsList = document.getElementById("api-projects-list");
 
     try{
-        const response = await fetch(`${API_BASE_URL}/projects`);
+        const response = await fetch(`${API_BASE_URL}/projects/`);
 
         if(!response.ok){
             throw new Error("Failed to load projects");
