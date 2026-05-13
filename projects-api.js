@@ -1,4 +1,5 @@
-const API_BASE_URL = "https://fastapi-portfolio-api.onrender.com";
+// const API_BASE_URL = "https://fastapi-portfolio-api.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 async function loadProjectsFromAPI(){
     const projectsList = document.getElementById("api-projects-list");
@@ -26,12 +27,31 @@ async function loadProjectsFromAPI(){
             projectCard.className = "project";
 
             projectCard.innerHTML = `
-            <div class="project-title">${project.name}</div>
+            <img src="${project.image_path}" alt="${project.image_alt}">
+
+            <div class="project-title">${project.title}</div>
 
             <ul class="project-introduction">
-                <li>${project.description}</li>
-                <li><strong>Skills: </strong>${project.skill}</li>
+                ${project.introductions.map((intro) => `<li>${intro}</li>`).join("")}
             </ul>
+
+            <div class="project-btn-container">
+                ${
+                    project.demo_url
+                    ? `<a href="${project.demo_url}" target="_blank">
+                            <div class="link-btn">Demo</div>
+                        </a>`
+                    : ""
+                }
+
+                ${
+                    project.github_url
+                    ? `<a href="${project.github_url}" target="_blank">
+                            <div class="link-btn">Github</div>
+                        </a>`
+                    : ""
+                }
+            </div>
             `;
 
             projectsList.appendChild(projectCard);
