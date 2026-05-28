@@ -25,25 +25,25 @@
 
     <div class="projects-container">
 
-        <!-- 購物網站 -->
+        <!-- E-commerce Website -->
         <div class="project">
             <img src="images/ecommerce_display.png" alt="ecommerce-website">
 
             <div class="project-title">E-commerce Website</div>
 
             <ul class="project-introduction">
-                <li>Developed a comprehensive <b>e-commerce website</b>.</li>
-                <li>Utilized <b>HTML, CSS, JavaScript, and PHP</b> for development, with <b>XAMPP (including MySQL
-                        database)</b>
-                    for local environment and data management.</li>
-                <li>Implemented core features including <b>user authentication (membership system)</b> and
-                    <b>administrator
-                        accounts</b>.
-                </li>
-                <li>Successfully integrated <b>various common e-commerce functionalities</b> found in typical online
-                    shopping
-                    platforms.</li>
-                <li>Previously created and configured a domain using duckDNS.</li>
+                <li>Developed a basic <b>e-commerce website</b> as a course or practice project.</li>
+
+                <li>Used <b>HTML, CSS, JavaScript, PHP, and MySQL</b> with <b>XAMPP</b> for local development and data
+                    management.</li>
+
+                <li>Implemented basic features such as user login, membership management, product browsing, and
+                    administrator accounts.</li>
+
+                <li>Practiced building common online shopping website features and connecting the frontend with a
+                    database.</li>
+
+                <li>Previously tried deploying or configuring access with DuckDNS.</li>
             </ul>
 
             <div class="project-btn-container">
@@ -60,20 +60,20 @@
             <div class="project-title">RAG Financial Report Analysis</div>
 
             <ul class="project-introduction">
-                <li>Architected a <b>Two-Stage Retrieval-Augmented Generation (RAG)</b> pipeline to overcome semantic
-                    retrieval ceilings, parsing and analyzing 100+ page financial reports (e.g., Tesla, Palantir).</li>
-                <li>Integrated a <b>Cross-Encoder Reranking Engine</b> (<code>sentence-transformers</code>) to evaluate
-                    context relevance, significantly improving retrieval precision for dense financial formulas and risk
-                    factors.</li>
-                <li>Developed an automated <b>Standalone Query Generator</b> via LLMs(GPT-5.4) to handle multi-turn
-                    contextual memory and cross-lingual queries, dynamically resolving pronouns and eliminating vector
-                    search noise.</li>
-                <li>Built a robust <b>Streamlit Web App</b> featuring multi-dataset state management, utilizing strict
-                    callback triggers to seamlessly switch between corporate databases without memory
-                    cross-contamination.</li>
-                <li>Enforced strict <b>Anti-Hallucination Mechanisms</b> through closed-book prompting, ensuring all
-                    generated analyses are strictly grounded in retrieved corporate data with zero data fabrication.
-                </li>
+                <li>Built a <b>RAG-based financial report analysis app</b> that allows users to ask questions about
+                    company reports such as Tesla and Palantir.</li>
+
+                <li>Implemented document chunking, vector search, and reranking to retrieve more relevant context before
+                    sending it to the LLM.</li>
+
+                <li>Used <b>sentence-transformers</b> for semantic retrieval and experimented with reranking to improve
+                    answer quality.</li>
+
+                <li>Built a simple <b>Streamlit Web App</b> for uploading or selecting reports and interacting with the
+                    system through a chat-style interface.</li>
+
+                <li>Added prompt constraints to reduce hallucination by asking the model to answer only based on
+                    retrieved report content.</li>
             </ul>
 
             <div class="project-btn-container">
@@ -93,12 +93,14 @@
             <div class="project-title">My Digital Notes</div>
 
             <ul class="project-introduction">
-                <li><b>Programming Language Notes:</b> A collection of my learning journey, code snippets, and insights
-                    into various programming concepts and practices.</li>
-                <li><b>Stock Market Knowledge:</b> My detailed observations, analyses, and strategies on investing,
-                    market trends, and financial literacy.</li>
-                <li><b>Travel Records:</b> Personal chronicles and reflections from my explorations around the world,
-                    including itineraries, experiences, and cultural insights.</li>
+                <li><b>Programming Notes:</b> A collection of my learning notes, code examples, and explanations for
+                    programming concepts.</li>
+
+                <li><b>Stock Market Notes:</b> Notes about investing, market observations, and financial knowledge that
+                    I have learned over time.</li>
+
+                <li><b>Personal Records:</b> A place where I organize selected personal notes, learning reflections, and
+                    other records.</li>
             </ul>
 
             <div class="project-btn-container">
@@ -120,20 +122,23 @@
             <div class="project-title">Oscar Market Analyst</div>
 
             <ul class="project-introduction">
-                <li>Developed an <b>end-to-end trading signal system</b> for US equities,
-                    from data ingestion to daily HTML email reports.</li>
-                <li>Integrated <b>5 external APIs</b> (yfinance, Polygon, Tavily, OpenRouter, Gmail)
-                    with <b>SQLite</b> storage and <b>Backtrader</b> backtesting engine.</li>
-                <li>Implemented a <b>hybrid sentiment engine</b>: <b>FinBERT</b> (deterministic) for
-                    historical backfill, <b>DeepSeek V3 LLM</b> for daily reports with human-readable reasoning.</li>
-                <li>Designed and tested <b>3 trading strategies</b> (pure technical / sentiment-filtered /
-                    regime-aware) through rigorous <b>4-year cross-bear-market backtesting</b> on 14 stocks.</li>
-                <li>Key finding: LLM sentiment filtering <b>reduced returns by 37.65%</b> vs baseline —
-                    led to a data-driven design pivot, consistent with findings in
-                    <b>FINSABER (Liu et al., 2025)</b>.
+                <li>Built a stock market analysis tool that collects price data, news, and technical indicators to
+                    generate daily market summaries.</li>
+
+                <li>Integrated tools such as <b>yfinance</b>, <b>OpenRouter</b>, <b>Gmail</b>, and <b>SQLite</b> for
+                    data collection, storage, LLM analysis, and email reports.</li>
+
+                <li>Implemented basic technical indicators such as moving averages, volume changes, RSI, MACD, support
+                    levels, and target/stop-loss price estimation.</li>
+
+                <li>Experimented with simple backtesting using <b>Backtrader</b> to compare different strategy ideas.
                 </li>
-                <li>Built a <b>6-dimension composite scoring system</b> (trend / bias / volume / support / MACD / RSI)
-                    with automated <b>entry/stop-loss/target price calculation</b>.</li>
+
+                <li>Tested whether sentiment analysis could improve trading signals, and found that it did not always
+                    improve performance.</li>
+
+                <li>This project is mainly a learning project for combining stock data, LLM analysis, technical
+                    indicators, and automated reports.</li>
             </ul>
 
             <div class="project-btn-container">
@@ -143,20 +148,22 @@
             </div>
         </div>
 
-        <!-- 新聞機器人 -->
+        <!-- Discord News Bot -->
         <div class="project">
             <img src="images/discord-bot-stock-and-github2.png" alt="discord-bot-stock-and-github">
 
             <div class="project-title">Discord News Bot</div>
 
             <ul class="project-introduction">
-                <li>Developed a Discord bot <b>automating the delivery of stock market insights</b> and <b>GitHub
-                        trending
-                        repositories</b>.</li>
-                <li>Implemented AI for <b>summarizing news</b> and translating content into Traditional Chinese.</li>
-                <li>Utilized scheduled jobs to provide timely updates on market and developer trends.</li>
-                <li>Employed <b>NewsAPI</b>, <b>Alpha Vantage</b>, and a <b>GitHub Trending API</b> for data
-                    acquisition.</li>
+                <li>Developed a Discord bot that sends scheduled updates about stock market news and GitHub trending
+                    repositories.</li>
+
+                <li>Used AI to summarize selected news articles and translate the content into Traditional Chinese.</li>
+
+                <li>Implemented scheduled jobs to automatically send daily or weekly updates to a Discord channel.</li>
+
+                <li>Used APIs such as <b>NewsAPI</b>, <b>Alpha Vantage</b>, and GitHub-related data sources for
+                    collecting information.</li>
             </ul>
 
             <div class="project-btn-container">
@@ -174,16 +181,20 @@
             <div class="project-title">AI Financial Supply Chain Risk Knowledge Graph</div>
 
             <ul class="project-introduction">
-                <li>A fully automated <b>AI Financial Supply Chain Risk Analysis System</b> designed for rapid market
-                    insights.</li>
-                <li>Powered by advanced <b>Large Language Models (GPT-4o/5.2)</b> to extract complex entity-relation
-                    triples from real-time financial news.</li>
-                <li>Enhanced with a custom <b>Auto-Verifier</b> to eliminate AI hallucinations and a quantitative
-                    <b>Market Sentiment Analyzer</b>.</li>
-                <li>Generates highly interactive <b>Knowledge Graphs</b> with dynamic sentiment watermarks for intuitive
-                    visual analysis.</li>
-                <li>Offers a seamless user experience through a <b>Streamlit Web App</b>, enabling one-click execution
-                    via stock tickers.</li>
+                <li>Built a prototype that extracts company, supplier, customer, and risk-related relationships from
+                    financial news.</li>
+
+                <li>Used LLMs to convert news articles into structured entity-relation data for building a simple
+                    knowledge graph.</li>
+
+                <li>Added basic validation rules to check whether extracted relationships are reasonable before
+                    displaying them.</li>
+
+                <li>Visualized the extracted relationships as an interactive graph to help users understand possible
+                    supply chain or market risks.</li>
+
+                <li>Built a <b>Streamlit Web App</b> that allows users to enter a stock ticker and generate a
+                    graph-based summary.</li>
             </ul>
 
             <div class="project-btn-container">
@@ -191,7 +202,8 @@
                     target="_blank">
                     <div class="link-btn">Demo</div>
                 </a>
-                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/" target="_blank">
+                <a href="https://github.com/oscar940327/AI-Financial-Supply-Chain-Risk-Knowledge-Graph.git"
+                    target="_blank">
                     <div class="link-btn">Github</div>
                 </a>
             </div>
@@ -204,16 +216,20 @@
             <div class="project-title">AI Learning Path Generator</div>
 
             <ul class="project-introduction">
-                <li>A dynamic <b>AI-Driven Learning Path Generator</b> designed to solve the cognitive cold-start
-                    problem for any unknown technical or theoretical domain.</li>
-                <li>Powered by <b>Large Language Models (GPT-5.2)</b> and <b>Pydantic Structured Output</b> to strictly
-                    decompose complex topics into granular, dependency-mapped learning nodes.</li>
-                <li>Enhanced with a robust <b>Graph Validation Engine (NetworkX)</b> to construct Directed Acyclic
-                    Graphs (DAGs), actively detecting and resolving circular dependencies.</li>
-                <li>Integrates a custom <b>Semantic Reranking Pipeline</b> using vector embeddings and Cosine Similarity
-                    to fetch and rank the most relevant tutorial videos via the YouTube Data API.</li>
-                <li>Delivers an interactive user experience through a <b>Streamlit Web App</b>, featuring zoomable
-                    <b>Mermaid.js</b> topology maps, dynamic level calculation, and API caching.</li>
+                <li>Built an AI learning path generator that helps users break down an unfamiliar topic into smaller
+                    learning steps.</li>
+
+                <li>Used LLM structured output with <b>Pydantic</b> to generate learning nodes in a consistent format.
+                </li>
+
+                <li>Used <b>NetworkX</b> to organize the learning steps as a directed graph and check basic dependency
+                    relationships.</li>
+
+                <li>Integrated the <b>YouTube Data API</b> to search for related tutorial videos for each learning step.
+                </li>
+
+                <li>Built a <b>Streamlit Web App</b> with interactive learning maps and cached API results to improve
+                    the user experience.</li>
             </ul>
 
             <div class="project-btn-container">
