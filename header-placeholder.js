@@ -33,13 +33,30 @@ const headerHTML = `
 `;
 
 {
-        const headerPlaceholder = document.getElementById('header-placeholder');
-        const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+    const headerPlaceholder = document.getElementById('header-placeholder');
+    const currentPage = window.location.pathname.split('/').pop() || 'index.html';
 
-        if (headerPlaceholder && !headerPlaceholder.querySelector('.site-sidebar')) {
+    const loadHeaderHTML = async () => {
+        try {
+            const response = await fetch('header.html', { cache: 'no-cache' });
+            if (!response.ok) {
+                throw new Error(`Unable to load header.html: ${response.status}`);
+            }
+            return await response.text();
+        } catch {
+            return headerHTML;
+        }
+    };
+
+    const initHeader = async () => {
+        if (!headerPlaceholder) {
+            return;
+        }
+
+        {
             const template = document.createElement('template');
-            template.innerHTML = headerHTML;
-            headerPlaceholder.appendChild(template.content);
+            template.innerHTML = await loadHeaderHTML();
+            headerPlaceholder.replaceChildren(template.content);
         }
         headerPlaceholder.classList.add('header-ready');
 
@@ -121,4 +138,7 @@ const headerHTML = `
             });
         }
 
+    };
+
+    initHeader();
 }
