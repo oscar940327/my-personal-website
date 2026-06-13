@@ -12,8 +12,12 @@ if (!reduceMotion) {
 
     const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
 
+    const getScrollAxis = () => document.body.dataset.scrollAxis === 'x' ? 'x' : 'y';
+
     const clampScroll = value => {
-        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        const maxScroll = getScrollAxis() === 'x'
+            ? document.documentElement.scrollWidth - window.innerWidth
+            : document.documentElement.scrollHeight - window.innerHeight;
         return Math.max(0, Math.min(value, maxScroll));
     };
 
@@ -40,7 +44,11 @@ if (!reduceMotion) {
             frameId = requestAnimationFrame(render);
         }
 
-        window.scrollTo(0, currentY);
+        if (getScrollAxis() === 'x') {
+            window.scrollTo(currentY, 0);
+        } else {
+            window.scrollTo(0, currentY);
+        }
     };
 
     const start = () => {
@@ -70,8 +78,9 @@ if (!reduceMotion) {
 
     window.addEventListener('scroll', () => {
         if (frameId === null) {
-            currentY = window.scrollY;
-            targetY = window.scrollY;
+            const scrollAxis = getScrollAxis();
+            currentY = scrollAxis === 'x' ? window.scrollX : window.scrollY;
+            targetY = currentY;
             momentum = 0;
         }
     }, { passive: true });

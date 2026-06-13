@@ -13,6 +13,12 @@ if (showcase && visualTrack && copies.length > 0) {
     const textRevealDelay = 400;
 
     showcase.style.setProperty('--project-count', projectCount);
+    document.documentElement.style.setProperty('--project-count', projectCount);
+    document.body.style.setProperty('--project-count', projectCount);
+
+    const syncScrollAxis = () => {
+        document.body.dataset.scrollAxis = window.matchMedia('(max-width: 760px)').matches ? 'x' : 'y';
+    };
 
     const syncImageStartPosition = () => {
         if (!indexLabel) {
@@ -51,9 +57,11 @@ if (showcase && visualTrack && copies.length > 0) {
     };
 
     const syncWithScroll = () => {
-        const stageHeight = window.innerHeight;
-        const showcaseTop = showcase.offsetTop;
-        const rawProgress = (window.scrollY - showcaseTop) / stageHeight;
+        const isSingleColumn = window.matchMedia('(max-width: 760px)').matches;
+        const stageSize = isSingleColumn ? window.innerWidth : window.innerHeight;
+        const scrollPosition = isSingleColumn ? window.scrollX : window.scrollY;
+        const showcaseStart = isSingleColumn ? showcase.offsetLeft : showcase.offsetTop;
+        const rawProgress = (scrollPosition - showcaseStart) / stageSize;
         const progress = Math.max(0, Math.min(rawProgress, maxProject));
         const nextProject = Math.max(0, Math.min(Math.round(progress), maxProject));
 
@@ -72,10 +80,12 @@ if (showcase && visualTrack && copies.length > 0) {
         });
     };
 
+    syncScrollAxis();
     syncWithScroll();
     syncImageStartPosition();
     window.addEventListener('scroll', requestSync, { passive: true });
     window.addEventListener('resize', () => {
+        syncScrollAxis();
         syncImageStartPosition();
         requestSync();
     });
