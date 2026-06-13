@@ -1,372 +1,418 @@
-/* ==================== Reset and Basic Styles ==================== */
+:root {
+    --bg: #f1ecde;
+    --surface: #e8e1d2;
+    --text: #2f2f2f;
+    --muted: #6b6b6b;
+    --soft: #a8a8a8;
+    --line: #d0c6b6;
+    --tag-bg: #f8f4ea;
+    --tag-border: #d6ccbb;
+}
+
+body.dark-mode {
+    --bg: #101010;
+    --surface: #181818;
+    --text: #d6d6d6;
+    --muted: #969696;
+    --soft: #696969;
+    --line: #4a4a4a;
+    --tag-bg: #151515;
+    --tag-border: #444444;
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+html,
 body {
     margin: 0;
-    padding: 0;
-    background-color: rgb(239, 239, 239);
-    font-family: 'Poppins', 'Plus Jakarta Sans', Arial, sans-serif;
-}
-
-/* 讓 html 和 body 隱藏捲軸，確保全域生效 */
-html, body {
-    /* 避免捲軸出現 */
+    min-height: 100%;
     overflow-x: hidden;
-    overflow-y: scroll;
-}
-
-/* 適用於 WebKit 瀏覽器 (Chrome, Safari, Edge) */
-html::-webkit-scrollbar, body::-webkit-scrollbar {
-    width: 0;
-    background: transparent;
-}
-html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb {
-    background: transparent;
-}
-/* 簡潔的 WebKit 隱藏方法 */
-html::-webkit-scrollbar, body::-webkit-scrollbar {
-    display: none;
-}
-
-/* 適用於 Firefox */
-html, body {
     scrollbar-width: none;
 }
 
-/* ==================== Gray Line ==================== */
-.gray {
-    height: 5px;
-    background-color: rgb(230, 230, 230);
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    display: none;
 }
 
-/* ==================== Self Intro Section ==================== */
-.self-intro {
-    width: 65%;
-    /* max-width: ; */
-    /* min-width: ; */
-    margin: 20px auto;
-    margin-top: 30px;
-    padding-left: 30px;
-    padding-bottom: 20px;
-    background-color: white;
-    border-radius: 15px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    display: flex;
-    flex-direction: row;
-    gap: 10px;
-    align-items: stretch;
-    position: relative;
-    overflow: hidden;
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Poppins', 'Plus Jakarta Sans', Arial, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-.context {
-    flex-grow: 1;
-    /* 讓文字內容佔據剩餘大部分空間 */
-    width: 70%;
-    text-align: left;
-    line-height: 1.6;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    padding-right: 20px;
-    padding-top: 30px;
-}
-
-.education {
-    font-size: 1.3em;
-    font-weight: bold;
-    color: rgb(49, 49, 49);
-    margin-bottom: 10px;
-}
-
-.slogan {
-    font-size: 1.9em;
-    font-weight: bold;
-    margin-bottom: 20px;
-}
-
-.introduction {
-    font-size: 1.1em;
-    margin-bottom: 30px;
-}
-
-.button-container {
-    display: flex;
-    align-items: flex-end;
-    gap: 15px;
-}
-
-.button-container a {
-    text-decoration: none;
-    display: flex;
-}
-
-.button-container a:visited {
+a {
     color: inherit;
     text-decoration: none;
 }
 
-.project-button,
-.resume-button {
-    padding: 5px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: center;
-    white-space: nowrap;
-    /* 防止按鈕文字換行 */
-    transition: all 0.2s ease-out;
-    /* 統一過度效果 */
+.portfolio-home {
+    width: auto;
+    max-width: 2280px;
+    margin-left: clamp(250px, 15vw, 390px);
+    margin-right: clamp(20px, 2.4vw, 72px);
+    padding: 0 0 34px;
 }
 
-.project-button {
-    background-color: #000000;
-    color: white;
+.hero-section {
+    min-height: clamp(720px, 82vh, 980px);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(400px, 0.9fr) minmax(520px, 1.1fr);
+    column-gap: clamp(72px, 7vw, 170px);
+    align-items: end;
+    padding-top: clamp(110px, 14vh, 180px);
+    padding-bottom: clamp(70px, 10vh, 130px);
 }
 
-.project-button:hover {
-    background-color: rgb(66, 66, 66);
+.hero-section h1 {
+    grid-column: 1;
+    margin: 0 0 clamp(34px, 5vh, 68px);
+    color: var(--text);
+    font-size: clamp(72px, 5.9vw, 170px);
+    font-weight: 200;
+    line-height: 0.96;
+    text-transform: uppercase;
 }
 
-.resume-button {
-    background-color: white;
-    border: 2px solid black;
-    color: black; 
-}
-
-.resume-button:hover {
-    background-color: black;
-    color: white;
-}
-
-/* ==================== Selfie and Contact Section (Fixes applied here) ==================== */
-.selfie-and-contact {
-    width: 35%;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-}
-
-.profile-picture-mobile {
-    display: none;
-}
-
-.profile-picture-desktop {
-    height: 80%;
+.hero-title.is-split {
     display: block;
 }
 
-.profile-picture-desktop img {
-    width: 100%;
-    height: 100%;
-    border-radius: 15px;
+.hero-title-line {
+    display: block;
+    overflow: hidden;
 }
 
-.contact-info {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+.hero-title-letter {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(0.72em);
+    animation: titleRise 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--letter-delay, 0s);
 }
 
-.contact-icons {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
+.role-label {
+    grid-column: 1;
+    margin: 0 0 clamp(120px, 18vh, 220px);
+    color: var(--muted);
+    font-size: clamp(19px, 1.25vw, 28px);
+    font-weight: 300;
 }
 
-.contact-icons a {
-    display: flex;
+.hero-email {
+    grid-column: 1;
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(19px, 1.2vw, 26px);
+    font-weight: 300;
+    line-height: 1.35;
+}
+
+.about-block {
+    grid-column: 2;
+    margin-bottom: clamp(8px, 2vh, 36px);
+}
+
+.about-block h2,
+.section-copy h2,
+.skills-section h2 {
+    margin: 0 0 38px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+    font-size: clamp(28px, 1.6vw, 40px);
+    font-weight: 300;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.about-block p,
+.section-copy p {
+    max-width: 760px;
+    margin: 0 0 5px;
+    color: var(--muted);
+    font-size: clamp(17px, 1.05vw, 22px);
+    font-weight: 300;
+    line-height: 1.35;
+}
+
+.motivation-section {
+    min-height: clamp(580px, 70vh, 780px);
+    display: grid;
+    grid-template-columns: minmax(400px, 0.9fr) minmax(520px, 1.1fr);
+    column-gap: clamp(72px, 7vw, 170px);
     align-items: center;
 }
 
-.contact-icons img {
-    width: 50px;
-    height: 50px;
-    transition: transform 0.2s ease-out;
+.section-copy {
+    padding-top: 20px;
 }
 
-.contact-icons img:hover {
-    transform: translateY(-3px) scale(1.05);
-    /* 璇庭時圖標輕微上浮 */
+.home-portrait {
+    width: min(100%, 680px);
+    margin: 48px auto 0;
+    border: 1px solid var(--line);
+    overflow: hidden;
+    position: relative;
+    background: var(--surface);
 }
 
-.email-text {
-    font-size: 1em;
-    text-align: center;
-    word-break: break-all;
+.home-portrait::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(180deg, rgba(241, 236, 222, 0.16), rgba(47, 47, 47, 0.08)),
+        rgba(241, 236, 222, 0.08);
+    pointer-events: none;
 }
 
-.experience-heading {
-    text-align: center;
-    font-size: 40px;
-    color: rgb(54, 54, 54);
+.home-portrait img {
+    width: 100%;
+    height: auto;
+    display: block;
+    filter: brightness(0.9) contrast(0.94) saturate(0.88);
 }
 
-.ncue-experience {
-    width: 63%;
-    background-color: white;
-    border-radius: 15px;
-    padding: 30px;
-    margin: 20px auto;
+body.dark-mode .home-portrait {
+    border-color: var(--line);
+}
+
+body.dark-mode .home-portrait::after {
+    background:
+        linear-gradient(180deg, rgba(16, 16, 16, 0.18), rgba(16, 16, 16, 0.36)),
+        rgba(16, 16, 16, 0.2);
+}
+
+body.dark-mode .home-portrait img {
+    filter: brightness(0.95) contrast(0.9) saturate(0.72);
+}
+
+@media (min-width: 1251px) {
+    .motivation-section {
+        align-items: start;
+    }
+
+    .section-copy {
+        padding-top: 48px;
+    }
+}
+
+@media (min-width: 1400px) and (max-width: 1600px) {
+    .section-copy {
+        --reveal-y: 48px;
+    }
+
+    .home-portrait {
+        --reveal-y: 48px;
+    }
+}
+
+.skills-section {
+    min-height: 430px;
+    padding-top: 22px;
+}
+
+.skills-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 90px;
+}
+
+.skill-group h3 {
+    margin: 0 0 22px;
+    color: var(--text);
+    font-size: clamp(28px, 1.6vw, 40px);
+    font-weight: 300;
+    text-transform: uppercase;
+}
+
+.skill-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 13px;
+}
+
+.skill-tags span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 29px;
+    padding: 4px 18px;
+    border: 1px solid var(--tag-border);
+    border-radius: 999px;
+    background: var(--tag-bg);
+    color: var(--muted);
+    font-size: 16px;
+    font-weight: 300;
+    white-space: nowrap;
+}
+
+.home-links {
+    min-height: 210px;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    gap: 5px;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 34px;
+    color: var(--text);
+    font-size: clamp(28px, 1.6vw, 40px);
+    font-weight: 300;
+    text-transform: uppercase;
 }
 
-.ncue-experience-title {
-    font-size: 1.5em;
+.home-links a {
+    transition: color 0.2s ease, transform 0.2s ease;
 }
 
-.ncue-experience-period {
-    margin-top: 20px;
-    font-size: 1.2em;
+.home-links a:hover {
+    color: var(--muted);
+    transform: translateX(6px);
 }
 
-.ncue-experience-detail{
-    font-size: 1.1em;
+.load-reveal {
+    --reveal-y: 0px;
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    transform: translate(-42px, var(--reveal-y));
+    animation: revealFromLeft 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--reveal-delay, 0s);
 }
 
-/* 平板 */
+.scroll-reveal {
+    --reveal-y: 0px;
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    transform: translate(-42px, var(--reveal-y));
+    transition:
+        opacity 1.15s cubic-bezier(0.16, 1, 0.3, 1),
+        clip-path 1.15s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 1.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.scroll-reveal.is-visible {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translate(0, var(--reveal-y));
+}
+
+@keyframes revealFromLeft {
+    from {
+        opacity: 0;
+        clip-path: inset(0 100% 0 0);
+        transform: translate(-42px, var(--reveal-y));
+    }
+
+    to {
+        opacity: 1;
+        clip-path: inset(0 0 0 0);
+        transform: translate(0, var(--reveal-y));
+    }
+}
+
+@keyframes titleRise {
+    from {
+        opacity: 0;
+        transform: translateY(0.72em);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 @media (max-width: 1250px) {
-
-    .self-intro {
-        width: 100%;
-        margin-left: 0;
-        margin-right: 0;
-        box-sizing: border-box;
-        margin-top: 20px;
-        gap: 0;
-        padding: 20px;
+    .portfolio-home {
+        width: min(780px, calc(100vw - 56px));
+        margin: 0 auto;
+        padding-top: 120px;
     }
 
-    .education {
-        font-size: 1.1em;
+    .hero-section,
+    .motivation-section {
+        min-height: auto;
+        grid-template-columns: 1fr;
+        row-gap: 62px;
+        padding: 70px 0;
     }
 
-    .slogan {
-        font-size: 1.5em;
+    .hero-section h1 {
+        margin-top: 0;
+        font-size: clamp(54px, 15vw, 112px);
     }
 
-    .introduction {
-        font-size: 0.9em;
+    .role-label,
+    .hero-email {
+        position: static;
     }
 
-    .contact-info {
-        margin-top: 45px;
+    .about-block {
+        grid-column: 1;
+        margin-top: 0;
     }
 
-    .profile-picture-desktop {
-        display: none;
+    .home-portrait {
+        width: min(100%, 620px);
     }
 
-    .profile-picture-mobile {
-        display: block;
-
+    .skills-grid {
+        grid-template-columns: 1fr;
+        gap: 54px;
     }
-
-    .profile-picture-mobile img {
-        width: 100%;
-        height: 100%;
-        border-radius: 99em;
-        border: 5px solid white;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    }
-
-    .ncue-experience {
-        width: 100%;
-        margin-left: 0;
-        margin-right: 0;
-        box-sizing: border-box;
-        padding: 20px;
-    }
-
-    .ncue-experience-title{
-        font-size: 1.3em;
-    }
-
-    .ncue-experience-period{
-        font-size: 1.0em;
-    }
-    .ncue-experience-detail{
-        font-size: 0.9em;
-    }
-
 }
 
-/* 手機 */
-@media (max-width: 850px) {
-    .self-intro{
+@media (max-width: 680px) {
+    .portfolio-home {
+        width: calc(100vw - 36px);
+        padding-top: 92px;
+        padding-bottom: 90px;
+    }
+
+    .hero-section,
+    .motivation-section {
+        row-gap: 42px;
+        padding: 52px 0;
+    }
+
+    .hero-section h1 {
+        font-size: clamp(48px, 18vw, 76px);
+    }
+
+    .about-block h2,
+    .section-copy h2,
+    .skills-section h2 {
+        margin-bottom: 26px;
+    }
+
+    .about-block p,
+    .section-copy p {
+        font-size: 15px;
+        line-height: 1.55;
+    }
+
+    .home-portrait {
         width: 100%;
-        margin-left: 0;
-        margin-right: 0;
-        box-sizing: border-box;
-        margin-top: 20px;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
     }
 
-    .selfie-and-contact{
-        width: 60%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
+    .home-links {
+        align-items: flex-start;
+        font-size: 24px;
     }
+}
 
-    .context{
-        width: 100%;
-        padding: 10px;
-        margin: 0;
-        gap: 8px;
-        text-align: center;
-    }
-
-    .education{
-        font-size: 1.1em;
-        margin-bottom: 5px;
-    }
-
-    .slogan{
-        font-size: 1.3em;
-        font-weight: 800;
-        margin-bottom: 10px;
-    }
-
-    .introduction{
-        font-size: 0.95em;
-        margin-bottom: 10px;
-    }
-
-    .button-container{
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .project-button,
-    .resume-button{
-        width: 60vw;
-        font-size: 1em;
-        padding: 10px 0;
-    }
-
-    .contact-info{
-        margin-top: 10px;
-    }
-
-    .email-text{
-        font-size: 0.95em;
-    }
-
-    .ncue-experience{
-        padding: 20px;
-        margin-top: 15px;
-        width: 100%;
-        margin-left: 0;
-        margin-right: 0;
-        box-sizing: border-box;
-    }
-
-    .ncue-experience-period{
-        margin-top: 10px;
+@media (prefers-reduced-motion: reduce) {
+    .load-reveal,
+    .scroll-reveal,
+    .hero-title-letter {
+        opacity: 1;
+        clip-path: none;
+        transform: translate(0, var(--reveal-y, 0px));
+        animation: none;
     }
 }

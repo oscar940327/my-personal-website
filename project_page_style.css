@@ -1,131 +1,292 @@
-/* ==================== Reset and Basic Styles ==================== */
 body {
+    --bg: #f1ecde;
+    --surface: #f8f4ea;
+    --text: #2f2f2f;
+    --muted: #6f6a61;
+    --line: #d0c6b6;
+    --shadow: rgba(64, 56, 45, 0.18);
     margin: 0;
     padding: 0;
-    background-color: rgb(239, 239, 239);
+    background: var(--bg);
+    color: var(--text);
     font-family: 'Poppins', 'Plus Jakarta Sans', Arial, sans-serif;
 }
 
-/* 讓 html 和 body 隱藏捲軸，確保全域生效 */
-html, body {
-    /* 避免捲軸出現 */
-    overflow-x: hidden;
-    overflow-y: scroll;
+body.dark-mode {
+    --bg: #111111;
+    --surface: #181818;
+    --text: #dddddd;
+    --muted: #8e8e8e;
+    --line: #4a4a4a;
+    --shadow: rgba(0, 0, 0, 0.5);
 }
 
-/* 適用於 WebKit 瀏覽器 (Chrome, Safari, Edge) */
-html::-webkit-scrollbar, body::-webkit-scrollbar {
-    width: 0;
-    background: transparent;
+html,
+body {
+    overflow-x: hidden;
+    scrollbar-width: none;
 }
-html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb {
-    background: transparent;
-}
-/* 簡潔的 WebKit 隱藏方法 */
-html::-webkit-scrollbar, body::-webkit-scrollbar {
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
     display: none;
 }
 
-/* ==================== Gray Line ==================== */
-.gray {
-    height: 5px;
-    background-color: rgb(230, 230, 230);
+.works-showcase {
+    position: relative;
+    height: calc(var(--project-count, 4) * 100vh);
 }
 
-.experience-heading{
-    text-align: center;
-    font-size: 40px;
-    color: rgb(54, 54, 54);
+.project-stage {
+    min-height: 100%;
+    padding: 0 clamp(56px, 5vw, 92px) 0 clamp(280px, 17vw, 360px);
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: minmax(430px, 0.95fr) minmax(420px, 0.9fr);
+    gap: clamp(64px, 7vw, 132px);
+    align-items: start;
 }
 
-.projects-container{
+.project-visual-window {
+    grid-column: 1;
+    width: 100%;
+    height: calc(var(--project-count, 4) * 100vh);
+}
+
+.project-visual-track {
+    height: auto;
+    transform: none;
+    transition: none;
+}
+
+.project-visual {
+    margin: 0;
+    height: 100vh;
+    padding-top: var(--project-image-top, 0px);
+    box-sizing: border-box;
     display: flex;
-    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: center;
-    gap: 32px;
-    margin: 30px auto;
-    max-width: 1050px;
 }
 
-.project{
-    background-color: white;
-    width: calc(33.33% - 32px);
-    min-width: 280px;            
-    max-width: 320px;
+.project-visual img {
+    width: 100%;
+    height: calc(100vh - var(--project-image-top, 0px));
+    display: block;
+    object-fit: contain;
+    object-position: center top;
+    opacity: 0.9;
+    filter: saturate(0.95) contrast(1.02);
+}
+
+body.dark-mode .project-visual img {
+    opacity: 0.86;
+    filter: saturate(0.84) contrast(1.04);
+}
+
+.project-info {
+    position: fixed;
+    top: 50%;
+    right: clamp(56px, 5vw, 92px);
+    width: min(35vw, 500px);
+    transform: translateY(-50%);
+    min-height: 470px;
     display: flex;
     flex-direction: column;
-    border-radius: 15px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    margin-bottom: 20px;
-    transition: transform 0.2s;
 }
 
-.project:hover{
-    transform: translateY(-3px) scale(1.03);
+.works-header {
+    display: grid;
+    grid-template-columns: max-content 1fr max-content;
+    align-items: end;
+    gap: 22px;
+    color: var(--text);
 }
 
-.project img{
-    border-radius: 15px 15px 0 0;
-    width: 100%;
-    height: 200px;
-    box-sizing: border-box;
+.works-header::after {
+    content: "";
+    grid-column: 2;
+    height: 1px;
+    background: var(--line);
+    align-self: center;
 }
 
-.project-title{
-    font-size: 1.2em;
-    font-weight: 700;
-    padding: 16px 20px 0 20px;
-    color: #3c3c3c;
-}
-
-.project-introduction{
-    padding: 10px 20px;
-    font-size: 0.98em;
-    color: #555;
+.works-header h1 {
     margin: 0;
+    font-size: clamp(26px, 1.6vw, 34px);
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: 0;
 }
 
-.project-introduction li{
-    margin-bottom: 12px;
-    margin-left: 12px;
-    line-height: 1.3;
+.works-header span {
+    color: var(--muted);
+    font-size: clamp(15px, 0.95vw, 19px);
+    font-weight: 300;
 }
 
-.project-introduction a{
-    color: #222;
-    text-decoration: none;
-    font-weight: 600;
-    transition: color 0.2s, text-decoration 0.2s;
-}
-
-.project-introduction a:hover{
-    color: #0366d6;
-    text-decoration: underline;
-}
-
-.project-btn-container{
-    padding: 16px 20px 20px 20px ;
+.project-index {
+    margin: clamp(96px, 14vh, 156px) 0 22px;
     display: flex;
-    justify-content: flex-start;
-    gap: 10px;
+    align-items: baseline;
+    color: var(--text);
+    font-size: clamp(20px, 1.25vw, 26px);
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    line-height: 1;
 }
 
-.project-btn-container a{
+.digit-window {
+    height: 1em;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: bottom;
+}
+
+.digit-strip {
+    display: flex;
+    flex-direction: column;
+    transform: translateY(calc(var(--active-project, 0) * -1em));
+    transition: transform 0.62s cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+.digit-strip span {
+    height: 1em;
+    line-height: 1;
+}
+
+.project-copy-stack {
+    position: relative;
+    min-height: 310px;
+}
+
+.project-copy {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.72s ease;
+}
+
+.project-copy.is-active {
+    opacity: 1;
+    transition-duration: 0.86s;
+    transition-delay: 0.1s;
+    pointer-events: auto;
+}
+
+.project-copy h2 {
+    margin: 0 0 8px;
+    color: var(--text);
+    font-size: clamp(30px, 2vw, 44px);
+    font-weight: 300;
+    line-height: 1.2;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.project-type {
+    margin: 0 0 28px;
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+    font-size: clamp(18px, 1.15vw, 24px);
+    font-weight: 300;
+}
+
+.project-summary {
+    margin: 0;
+    color: color-mix(in srgb, var(--text) 78%, var(--muted));
+    font-size: clamp(17px, 1.15vw, 24px);
+    font-weight: 300;
+    line-height: 1.55;
+}
+
+.project-actions {
+    margin-top: 34px;
+    display: flex;
+    gap: 18px;
+}
+
+.project-actions a {
+    color: var(--text);
     text-decoration: none;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+    padding: 13px 18px;
+    border: 1px solid color-mix(in srgb, var(--text) 42%, transparent);
+    border-radius: 5px;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
-.link-btn{
-    background: #24292f;
-    color: white;
-    padding: 8px 18px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.2s;
-    border: 2px solid #24292f;
+.project-actions a:hover {
+    color: var(--bg);
+    background: var(--text);
+    border-color: var(--text);
 }
 
-.link-btn:hover{
-    background-color: white;
-    color: #24292f;
-    border: 2px solid #24292f;
+@media (max-width: 1250px) {
+    .project-stage {
+        padding: 150px 28px 80px;
+        grid-template-columns: 1fr;
+        gap: 42px;
+    }
+
+    .project-info {
+        min-height: 470px;
+    }
+
+    .project-index {
+        margin-top: 48px;
+    }
+}
+
+@media (max-width: 680px) {
+    .project-stage {
+        padding: 108px 18px 24px;
+        gap: 24px;
+    }
+
+    .project-visual-window {
+        aspect-ratio: 16 / 9;
+        transform: translateY(18px);
+    }
+
+    .works-header {
+        grid-template-columns: 1fr max-content;
+        gap: 14px;
+    }
+
+    .works-header::after {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .project-copy-stack {
+        min-height: 280px;
+    }
+
+    .project-copy h2 {
+        font-size: 26px;
+        line-height: 1.18;
+    }
+
+    .project-type {
+        margin-bottom: 20px;
+        font-size: 17px;
+    }
+
+    .project-summary {
+        font-size: 16px;
+        line-height: 1.42;
+    }
+
+    .project-index {
+        margin: 30px 0 18px;
+        font-size: 18px;
+    }
+
+    .project-actions {
+        margin-top: 22px;
+        flex-wrap: wrap;
+    }
 }

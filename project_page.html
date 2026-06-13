@@ -12,245 +12,150 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap"
         rel="stylesheet" />
-    <link rel="stylesheet" href="project_page_style.css">
-    <link rel="stylesheet" href="header_style.css">
+    <link rel="stylesheet" href="project_page_style.css?v=20260613-10">
+    <link rel="stylesheet" href="header_style.css?v=20260613-13">
     <link rel="icon" href="images/icon3.png" type="image/x-icon">
     <title>Oscar's Projects</title>
 </head>
 
 <body>
-    <div id="header-placeholder"></div>
+    <div id="header-placeholder">
+        <header class="site-sidebar" aria-label="Primary navigation">
+            <a class="brand-mark" href="index.html" aria-label="Oscar Cheng home"></a>
 
-    <div class="experience-heading">- Featured Project -</div>
+            <nav class="sidebar-menu">
+                <a href="index.html">HOME</a>
+                <a class="active" href="project_page.html">PROJECT</a>
+                <a href="timeline_page.html">TIMELINE</a>
+                <span class="nav-indicator" aria-hidden="true"></span>
+            </nav>
 
-    <div class="projects-container">
-
-        <!-- E-commerce Website -->
-        <div class="project">
-            <img src="images/ecommerce_display.png" alt="ecommerce-website">
-
-            <div class="project-title">E-commerce Website</div>
-
-            <ul class="project-introduction">
-                <li>Developed a basic <b>e-commerce website</b> as a course or practice project.</li>
-
-                <li>Used <b>HTML, CSS, JavaScript, PHP, and MySQL</b> with <b>XAMPP</b> for local development and data
-                    management.</li>
-
-                <li>Implemented basic features such as user login, membership management, product browsing, and
-                    administrator accounts.</li>
-
-                <li>Practiced building common online shopping website features and connecting the frontend with a
-                    database.</li>
-
-                <li>Previously tried deploying or configuring access with DuckDNS.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://youtu.be/VJzby64Ukl0" target="_blank">
-                    <div class="link-btn">Demo</div>
+            <div class="sidebar-social" aria-label="Social links">
+                <a href="https://github.com/oscar940327" target="_blank" aria-label="GitHub">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M12 2.6c-5.4 0-9.7 4.4-9.7 9.7 0 4.3 2.8 8 6.7 9.2.5.1.7-.2.7-.5v-1.7c-2.7.6-3.3-1.2-3.3-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 0 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.8.8.1-.6.3-1.1.6-1.3-2.2-.2-4.5-1.1-4.5-4.8 0-1.1.4-1.9 1-2.6-.1-.3-.4-1.3.1-2.6 0 0 .8-.3 2.7 1 .8-.2 1.6-.3 2.4-.3s1.7.1 2.4.3c1.8-1.2 2.7-1 2.7-1 .5 1.3.2 2.3.1 2.6.6.7 1 1.5 1 2.6 0 3.7-2.3 4.5-4.5 4.8.4.3.7.9.7 1.8V21c0 .3.2.6.7.5 3.9-1.3 6.7-4.9 6.7-9.2 0-5.3-4.3-9.7-9.7-9.7Z" />
+                    </svg>
+                </a>
+                <a href="https://mail.google.com/mail/?view=cm&to=oscar940327@gmail.com" target="_blank"
+                    aria-label="Email">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M4.5 6.2h15c.8 0 1.5.7 1.5 1.5v8.6c0 .8-.7 1.5-1.5 1.5h-15c-.8 0-1.5-.7-1.5-1.5V7.7c0-.8.7-1.5 1.5-1.5Zm.7 2.2 6.8 4.5 6.8-4.5H5.2Zm13.7 7.2v-5l-6.4 4.2c-.3.2-.7.2-1 0l-6.4-4.2v5h13.8Z" />
+                    </svg>
                 </a>
             </div>
-        </div>
+        </header>
 
-        <!-- RAG Financial Report Analysis -->
-        <div class="project">
-            <img src="images/rag-financial-report-analysis.png" alt="RAG Financial Report Analysis">
-
-            <div class="project-title">RAG Financial Report Analysis</div>
-
-            <ul class="project-introduction">
-                <li>Built a <b>RAG-based financial report analysis app</b> that allows users to ask questions about
-                    company reports such as Tesla and Palantir.</li>
-
-                <li>Implemented document chunking, vector search, and reranking to retrieve more relevant context before
-                    sending it to the LLM.</li>
-
-                <li>Used <b>sentence-transformers</b> for semantic retrieval and experimented with reranking to improve
-                    answer quality.</li>
-
-                <li>Built a simple <b>Streamlit Web App</b> for uploading or selecting reports and interacting with the
-                    system through a chat-style interface.</li>
-
-                <li>Added prompt constraints to reduce hallucination by asking the model to answer only based on
-                    retrieved report content.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/" target="_blank">
-                    <div class="link-btn">Demo</div>
-                </a>
-                <a href="https://github.com/oscar940327/RAG-Financial-Report-Analysis.git" target="_blank">
-                    <div class="link-btn">Github</div>
-                </a>
-            </div>
-        </div>
-
-        <!-- HackMD-->
-        <div class="project">
-            <img src="images/hackmd.jpg" alt="HackMD">
-
-            <div class="project-title">My Digital Notes</div>
-
-            <ul class="project-introduction">
-                <li><b>Programming Notes:</b> A collection of my learning notes, code examples, and explanations for
-                    programming concepts.</li>
-
-                <li><b>Stock Market Notes:</b> Notes about investing, market observations, and financial knowledge that
-                    I have learned over time.</li>
-
-                <li><b>Personal Records:</b> A place where I organize selected personal notes, learning reflections, and
-                    other records.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://hackmd.io/@RPGoscar" target="_blank">
-                    <div class="link-btn">HackMD</div>
-                </a>
-            </div>
-        </div>
-
+        <footer class="site-credit">© Oscar Cheng</footer>
     </div>
+    <button class="theme-toggle" type="button" aria-label="Toggle color theme">
+        <span></span>
+    </button>
 
-    <div class="experience-heading">- Vibe Coded -</div>
-
-    <div class="projects-container">
-        <!-- Market Analyst -->
-        <div class="project">
-            <img src="images/market-analyst.png" alt="market-analyst">
-
-            <div class="project-title">Oscar Market Analyst</div>
-
-            <ul class="project-introduction">
-                <li>Built a stock market analysis tool that collects price data, news, and technical indicators to
-                    generate daily market summaries.</li>
-
-                <li>Integrated tools such as <b>yfinance</b>, <b>OpenRouter</b>, <b>Gmail</b>, and <b>SQLite</b> for
-                    data collection, storage, LLM analysis, and email reports.</li>
-
-                <li>Implemented basic technical indicators such as moving averages, volume changes, RSI, MACD, support
-                    levels, and target/stop-loss price estimation.</li>
-
-                <li>Experimented with simple backtesting using <b>Backtrader</b> to compare different strategy ideas.
-                </li>
-
-                <li>Tested whether sentiment analysis could improve trading signals, and found that it did not always
-                    improve performance.</li>
-
-                <li>This project is mainly a learning project for combining stock data, LLM analysis, technical
-                    indicators, and automated reports.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://github.com/oscar940327/oscar-market-analyst" target="_blank">
-                    <div class="link-btn">Github</div>
-                </a>
+    <main class="works-showcase" aria-label="Project showcase">
+        <section class="project-stage">
+            <div class="project-visual-window" aria-hidden="true">
+                <div class="project-visual-track">
+                    <figure class="project-visual">
+                        <img src="images/rag-financial-report-analysis.png" alt="">
+                    </figure>
+                    <figure class="project-visual">
+                        <img src="images/market-analyst.png" alt="">
+                    </figure>
+                    <figure class="project-visual">
+                        <img src="images/ai-financial-supply-chain-risk-knowledge-graph.png" alt="">
+                    </figure>
+                    <figure class="project-visual">
+                        <img src="images/ai-learning-path-generator.png" alt="">
+                    </figure>
+                </div>
             </div>
-        </div>
 
-        <!-- Discord News Bot -->
-        <div class="project">
-            <img src="images/discord-bot-stock-and-github2.png" alt="discord-bot-stock-and-github">
+            <section class="project-info" aria-live="polite">
+                <div class="works-header">
+                    <h1>PROJECT</h1>
+                    <span>/oscar940327</span>
+                </div>
 
-            <div class="project-title">Discord News Bot</div>
+                <div class="project-index" aria-label="Project 1 of 4">
+                    <span>[ 0</span>
+                    <span class="digit-window" aria-hidden="true">
+                        <span class="digit-strip">
+                            <span>1</span>
+                            <span>2</span>
+                            <span>3</span>
+                            <span>4</span>
+                        </span>
+                    </span>
+                    <span> / 04 ]</span>
+                </div>
 
-            <ul class="project-introduction">
-                <li>Developed a Discord bot that sends scheduled updates about stock market news and GitHub trending
-                    repositories.</li>
+                <div class="project-copy-stack">
+                    <article class="project-copy is-active">
+                        <h2>RAG Financial Report Analysis</h2>
+                        <p class="project-type">AI Application / Streamlit / RAG</p>
+                        <p class="project-summary">
+                            A RAG-based financial report analysis app for asking questions about company reports, using
+                            chunking, vector search, reranking, and prompt constraints to reduce hallucination.
+                        </p>
+                        <div class="project-actions">
+                            <a href="https://rag-financial-report-analysis-pymmrcewewz4sdkaj9tjmt.streamlit.app/"
+                                target="_blank">Demo</a>
+                            <a href="https://github.com/oscar940327/RAG-Financial-Report-Analysis.git"
+                                target="_blank">GitHub</a>
+                        </div>
+                    </article>
 
-                <li>Used AI to summarize selected news articles and translate the content into Traditional Chinese.</li>
+                    <article class="project-copy">
+                        <h2>Oscar Market Analyst</h2>
+                        <p class="project-type">Market Tool / Python / Automation</p>
+                        <p class="project-summary">
+                            A stock market analysis workflow that collects price data, news, and indicators to generate
+                            daily summaries with LLM analysis, SQLite storage, and email reports.
+                        </p>
+                        <div class="project-actions">
+                            <a href="https://github.com/oscar940327/oscar-market-analyst" target="_blank">GitHub</a>
+                        </div>
+                    </article>
 
-                <li>Implemented scheduled jobs to automatically send daily or weekly updates to a Discord channel.</li>
+                    <article class="project-copy">
+                        <h2>AI Financial Supply Chain Risk Knowledge Graph</h2>
+                        <p class="project-type">AI Prototype / Knowledge Graph / Streamlit</p>
+                        <p class="project-summary">
+                            A prototype that extracts company, supplier, customer, and risk relationships from financial
+                            news, validates the results, and visualizes them as an interactive graph.
+                        </p>
+                        <div class="project-actions">
+                            <a href="https://oscar940327-ai-financial-supply-chain-risk-knowle-srcapp-zuftdi.streamlit.app/"
+                                target="_blank">Demo</a>
+                            <a href="https://github.com/oscar940327/AI-Financial-Supply-Chain-Risk-Knowledge-Graph.git"
+                                target="_blank">GitHub</a>
+                        </div>
+                    </article>
 
-                <li>Used APIs such as <b>NewsAPI</b>, <b>Alpha Vantage</b>, and GitHub-related data sources for
-                    collecting information.</li>
-            </ul>
+                    <article class="project-copy">
+                        <h2>AI Learning Path Generator</h2>
+                        <p class="project-type">AI Learning Tool / NetworkX / Streamlit</p>
+                        <p class="project-summary">
+                            An AI learning path generator that breaks unfamiliar topics into structured learning steps,
+                            organizes them as a directed graph, and searches YouTube resources for each node.
+                        </p>
+                        <div class="project-actions">
+                            <a href="https://ai-learning-path-generator-jv5oh38cnvq3htwx6xkarb.streamlit.app/"
+                                target="_blank">Demo</a>
+                            <a href="https://github.com/oscar940327/AI-Learning-Path-Generator.git"
+                                target="_blank">GitHub</a>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </section>
+    </main>
 
-            <div class="project-btn-container">
-                <a href="https://github.com/oscar940327/CodeCapital" target="_blank">
-                    <div class="link-btn">Github</div>
-                </a>
-            </div>
-        </div>
-
-        <!-- AI Financial Supply Chain Risk Knowledge Graph -->
-        <div class="project">
-            <img src="images/ai-financial-supply-chain-risk-knowledge-graph.png"
-                alt="AI Financial Supply Chain Risk Knowledge Graph">
-
-            <div class="project-title">AI Financial Supply Chain Risk Knowledge Graph</div>
-
-            <ul class="project-introduction">
-                <li>Built a prototype that extracts company, supplier, customer, and risk-related relationships from
-                    financial news.</li>
-
-                <li>Used LLMs to convert news articles into structured entity-relation data for building a simple
-                    knowledge graph.</li>
-
-                <li>Added basic validation rules to check whether extracted relationships are reasonable before
-                    displaying them.</li>
-
-                <li>Visualized the extracted relationships as an interactive graph to help users understand possible
-                    supply chain or market risks.</li>
-
-                <li>Built a <b>Streamlit Web App</b> that allows users to enter a stock ticker and generate a
-                    graph-based summary.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://oscar940327-ai-financial-supply-chain-risk-knowle-srcapp-zuftdi.streamlit.app/"
-                    target="_blank">
-                    <div class="link-btn">Demo</div>
-                </a>
-                <a href="https://github.com/oscar940327/AI-Financial-Supply-Chain-Risk-Knowledge-Graph.git"
-                    target="_blank">
-                    <div class="link-btn">Github</div>
-                </a>
-            </div>
-        </div>
-
-        <!-- AI Learning Path Generator -->
-        <div class="project">
-            <img src="images/ai-learning-path-generator.png" alt="AI Learning Path Generator">
-
-            <div class="project-title">AI Learning Path Generator</div>
-
-            <ul class="project-introduction">
-                <li>Built an AI learning path generator that helps users break down an unfamiliar topic into smaller
-                    learning steps.</li>
-
-                <li>Used LLM structured output with <b>Pydantic</b> to generate learning nodes in a consistent format.
-                </li>
-
-                <li>Used <b>NetworkX</b> to organize the learning steps as a directed graph and check basic dependency
-                    relationships.</li>
-
-                <li>Integrated the <b>YouTube Data API</b> to search for related tutorial videos for each learning step.
-                </li>
-
-                <li>Built a <b>Streamlit Web App</b> with interactive learning maps and cached API results to improve
-                    the user experience.</li>
-            </ul>
-
-            <div class="project-btn-container">
-                <a href="https://ai-learning-path-generator-jv5oh38cnvq3htwx6xkarb.streamlit.app/" target="_blank">
-                    <div class="link-btn">Demo</div>
-                </a>
-                <a href="https://github.com/oscar940327/AI-Learning-Path-Generator.git" target="_blank">
-                    <div class="link-btn">Github</div>
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <div class="experience-heading">- Projects from API -</div>
-
-    <div id="api-projects-list" class="projects-container">
-        <p>Loading projects...</p>
-    </div>
-
-    <script src="projects-api.js"></script>
-    <script src="header-placeholder.js" defer></script>
+    <script src="smooth-scroll.js?v=20260613-2" defer></script>
+    <script src="project-page.js?v=20260613-10" defer></script>
+    <script src="header-placeholder.js?v=20260613-11" defer></script>
 
 </body>
 

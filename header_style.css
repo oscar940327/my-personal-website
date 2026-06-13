@@ -1,263 +1,276 @@
-.header {
+.site-sidebar,
+.site-sidebar *,
+.theme-toggle,
+.site-credit,
+body,
+body * {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.site-sidebar {
+    position: fixed;
+    left: clamp(56px, 3.8vw, 92px);
+    top: clamp(120px, 12vh, 170px);
+    bottom: 28px;
+    z-index: 30;
+    width: clamp(170px, 9vw, 230px);
     display: flex;
-    align-items: center;
-    height: 70px;
-    background-color: white;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-
-    /* background-color: black; */
+    flex-direction: column;
+    pointer-events: none;
 }
 
-.logo-link {
-    display: flex;
-    position: relative;
-    align-items: center;
-    left: 10%;
-    width: 10%;
+.site-sidebar a,
+.theme-toggle {
+    pointer-events: auto;
 }
 
-.menu {
-    display: flex;
-    flex-grow: 1;
-    gap: 7%;
-    justify-content: center;
-    font-size: 20px;
-    width: 80%;
-
-    /* color: white; */
-}
-
-.menu a {
-    text-decoration: none;
-    position: relative;
-    /* 設定相對定位，讓 ::after 可以在此 div 內部絕對定位 */
-    cursor: pointer;
-    /* 讓滑鼠移到上面時顯示手形游標 */
-    text-decoration: none;
-    /* 移除文字預設底線 */
-    padding-bottom: 4px;
-    /* 為底線留出空間 */
-    /* 確保文字不會因為底線而變色，保持一致 */
-    transition: color 0.2s ease-out;
-    color: black;
-    display: block;
-}
-
-.menu div::after {
-    /* 針對每個選單項目的底線效果 */
-    content: '';
-    /* 偽元素內容為空 */
-    position: absolute;
-    bottom: 0;
-    /* 定位在底部 */
-    left: 50%;
-    /* 初始從中間開始 */
-    transform: translateX(-50%);
-    /* 確保真正的中心對齊 */
-    width: 0;
-    /* 初始寬度為 0 */
-    height: 1.5px;
-    /* 底線高度 */
-    background-color: rgb(120, 120, 120);
-    /* 底線顏色，您可以自由調整 */
-    transition: width 0.2s ease-out;
-    /* 過渡效果 */
-}
-
-.menu div:hover::after {
-    width: 100%;
-    /* 懸停時寬度展開到 100% */
-}
-
-.menu div:hover {
-    color: rgb(120, 120, 120);
-    /* 滑鼠懸停時文字顏色 */
-}
-
-.off-screen-menu{
+.brand-mark {
     display: none;
 }
 
-.header .contact {
-    width: 10%;
-    display: flex;
-    justify-content: center;
+.sidebar-menu {
     position: relative;
-    right: 5%;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    --indicator-x: 0px;
+    --indicator-y: 0px;
+    --nav-line-width: clamp(150px, 7.5vw, 210px);
+    --indicator-width: var(--nav-line-width);
+    --indicator-opacity: 0;
+    --indicator-scale: 1;
+    --line-gap: 7px;
 }
 
-.header .contact_icon img {
-    transition: transform 0.2s ease-out;
+.sidebar-menu a {
+    position: relative;
+    width: max-content;
+    color: var(--text, #2f2f2f);
+    font-size: clamp(26px, 1.28vw, 36px);
+    font-weight: 500;
+    line-height: 1;
+    text-decoration: none;
+    text-transform: uppercase;
+    opacity: 0.32;
+    transition: opacity 0.52s ease, color 0.52s ease;
 }
 
-.header .contact_icon:hover img {
-    transform: translateY(-3px) scale(1.05);
-    /* 向上移動 3px */
+.sidebar-menu a.active,
+.sidebar-menu a.is-pending,
+.sidebar-menu a:hover {
+    opacity: 0.92;
 }
 
-/* 手機 */
-@media (max-width: 850px) {
-    .logo-link {
-        width: 100%;
-        left: 7%;
-        display: flex;
-        justify-content: center;
+.sidebar-menu a::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: calc(100% + var(--line-gap));
+    width: var(--nav-line-width);
+    height: 1px;
+    background: var(--text, #2f2f2f);
+    opacity: 0;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.52s ease, opacity 0.22s ease;
+    pointer-events: none;
+}
+
+.sidebar-menu a:not(.active):hover::after {
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+.sidebar-menu.is-leaving a::after {
+    opacity: 0;
+    transform: scaleX(0);
+}
+
+.sidebar-menu.is-leaving a.is-pending::after {
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+.sidebar-menu a.active.is-exiting {
+    opacity: 0.32;
+}
+
+.sidebar-menu:not(.is-ready) a.active::after {
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+.nav-indicator {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--indicator-width);
+    height: 1px;
+    display: block;
+    background: var(--text, #2f2f2f);
+    opacity: var(--indicator-opacity);
+    transform: translate(var(--indicator-x), var(--indicator-y)) scaleX(var(--indicator-scale));
+    transform-origin: left center;
+    transition: opacity 0.18s ease;
+    pointer-events: none;
+}
+
+.sidebar-menu.is-ready .nav-indicator {
+    transition: opacity 0.18s ease, transform 0.68s ease;
+}
+
+.sidebar-menu.is-leaving {
+    pointer-events: none;
+}
+
+.sidebar-menu.is-leaving .nav-indicator {
+    --indicator-scale: 0;
+}
+
+.sidebar-social {
+    margin-top: clamp(58px, 4.5vw, 86px);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.sidebar-social a {
+    width: 46px;
+    height: 46px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    color: var(--text, #2f2f2f);
+    text-decoration: none;
+    opacity: 0.9;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.sidebar-social svg {
+    width: 36px;
+    height: 36px;
+    display: block;
+    fill: currentColor;
+}
+
+.sidebar-social a:hover {
+    opacity: 0.55;
+    transform: translateY(-2px);
+}
+
+.theme-toggle {
+    position: fixed;
+    top: 28px;
+    right: 46px;
+    z-index: 100;
+    width: 76px;
+    height: 36px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    border: 2px solid var(--text, #2f2f2f);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text, #2f2f2f);
+    cursor: pointer;
+    appearance: none;
+    opacity: 1;
+    visibility: visible;
+}
+
+.theme-toggle span {
+    display: block;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: currentColor;
+    transition: transform 0.25s ease, background-color 0.25s ease;
+}
+
+body.dark-mode .theme-toggle span {
+    transform: translateX(40px);
+}
+
+.site-credit {
+    position: fixed;
+    left: clamp(56px, 3.8vw, 92px);
+    bottom: 18px;
+    z-index: 30;
+    color: var(--muted, #6b6b6b);
+    font-size: 15px;
+    font-weight: 300;
+}
+
+@media (max-width: 1250px) {
+    .site-sidebar {
+        left: 28px;
+        right: 28px;
+        top: 28px;
+        bottom: auto;
+        width: auto;
+        height: 42px;
+        flex-direction: row;
         align-items: center;
-        position: relative;
+        justify-content: flex-end;
     }
 
-    .menu {
+    .sidebar-menu {
+        flex-direction: row;
+        gap: 22px;
+        --line-gap: 5px;
+        --nav-line-width: 64px;
+    }
+
+    .sidebar-menu a {
+        font-size: 13px;
+    }
+
+    .sidebar-social {
         display: none;
     }
 
-    .hamburger-menu {
-        display: block;
+    .theme-toggle {
+        top: 72px;
+        right: 28px;
+        width: 58px;
+        height: 28px;
     }
 
-    .header .contact {
+    .theme-toggle span {
+        width: 20px;
+        height: 20px;
+    }
+
+    body.dark-mode .theme-toggle span {
+        transform: translateX(28px);
+    }
+
+    .site-credit {
         display: none;
     }
+}
 
-    /* ====================漢堡選單===================*/
-    .off-screen-menu {
-        background-color: white;
-        position: absolute;
+@media (max-width: 680px) {
+    .site-sidebar {
+        left: 18px;
+        right: 18px;
+        top: 18px;
+    }
+
+    .sidebar-menu {
+        gap: 14px;
+    }
+
+    .sidebar-menu a {
+        font-size: 11px;
+    }
+
+    .theme-toggle {
         top: 70px;
-        width: 100vw;
-        z-index: 1000;
-        display: none;
-        opacity: 0;
-        pointer-events: none;
+        right: 18px;
     }
-
-    .off-screen-menu.active {
-        display: block;
-        animation: slideDown 0.3s;
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    @keyframes slideDown {
-        from {
-            opacity: 0;
-            transform: translateY(-20px);
-        }
-
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-
-    .off-screen-menu ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-    }
-
-    .off-screen-menu ul a{
-        text-decoration: none;
-        color: #515151;
-    }
-
-    .off-screen-menu li {
-        border-bottom: 1.5px solid #e0e0e0;
-        padding: 18px 0;
-        text-align: center;
-        font-size: 20px;
-        background: transparent;
-        transition: background 0.2s;
-        position: relative;
-        cursor: pointer;
-    }
-
-    .off-screen-menu li::after {
-        content: '';
-        position: absolute;
-        left: 50%;
-        bottom: 0;
-        transform: translateX(-50%);
-        width: 0;
-        height: 2px;
-        background: #888;
-        transition: width 0.2s;
-    }
-
-    .off-screen-menu li:hover::after {
-        width: 80%;
-    }
-
-    .off-screen-menu li:last-child {
-        /* border-bottom: none; */
-        padding: 12px 0;
-    }
-
-    .off-screen-menu li a {
-        display: inline-block;
-        margin: 0 8px;
-        vertical-align: middle;
-    }
-
-    .off-screen-menu li img {
-        width: 38px;
-        height: 38px;
-        border-radius: 8px;
-        transition: transform 0.2s ease-out;
-    }
-
-    .off-screen-menu li a:hover img {
-        transform: translateY(-3px);
-    }
-
-    nav {
-        padding: 1rem;
-        display: flex;
-        background-color: white;
-    }
-
-    .hamburger-menu {
-        height: 36px;
-        width: 36px;
-        margin-left: auto;
-        position: relative;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .hamburger-menu span {
-        height: 4px;
-        width: 26px;
-        background-color: rgb(87, 87, 87);
-        border-radius: 25px;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        transition: 0.3s ease;
-    }
-
-    .hamburger-menu span:nth-child(1) {
-        top: 25%;
-    }
-
-    .hamburger-menu span:nth-child(3) {
-        top: 75%;
-    }
-
-    .hamburger-menu.active span:nth-child(1) {
-        top: 50%;
-        transform: translate(-50%, -50%) rotate(45deg);
-    }
-
-    .hamburger-menu.active span:nth-child(2) {
-        opacity: 0;
-    }
-
-    .hamburger-menu.active span:nth-child(3) {
-        top: 50%;
-        transform: translate(-50%, -50%) rotate(-45deg);
-    }
-
 }

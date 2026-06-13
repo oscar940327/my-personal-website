@@ -13,99 +13,128 @@
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="home_page_style.css">
-    <link rel="stylesheet" href="header_style.css">
+    <link rel="stylesheet" href="header_style.css?v=20260613-13">
     <link rel="icon" href="images/icon3.png" type="image/x-icon">
     <title>Oscar's Website</title>
 </head>
 
 <body>
-    <div id="header-placeholder"></div>
+    <div id="header-placeholder">
+        <header class="site-sidebar" aria-label="Primary navigation">
+            <a class="brand-mark" href="index.html" aria-label="Oscar Cheng home"></a>
 
-    <!-- <div class="gray"></div> -->
+            <nav class="sidebar-menu">
+                <a class="active" href="index.html">HOME</a>
+                <a href="project_page.html">PROJECT</a>
+                <a href="timeline_page.html">JOURNEY</a>
+                <span class="nav-indicator" aria-hidden="true"></span>
+            </nav>
 
-    <div class="self-intro">
-        <div class="context">
-            <div class="education">CSIE Student at NCUE</div>
-            <div class="slogan">
-                Passionate about turning ideas into efficient and
-                impactful software solutions.
-            </div>
-            <div class="introduction">
-                Hello, I'm Oscar Cheng. As a Computer Science student at National Changhua University of Education
-                (NCUE), I'm currently preparing applications for CS master's programs abroad.
-            </div>
-            <div class="button-container">
-                <a href="project_page.html">
-                    <div class="project-button">View my projects</div>
+            <div class="sidebar-social" aria-label="Social links">
+                <a href="https://github.com/oscar940327" target="_blank" aria-label="GitHub">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M12 2.6c-5.4 0-9.7 4.4-9.7 9.7 0 4.3 2.8 8 6.7 9.2.5.1.7-.2.7-.5v-1.7c-2.7.6-3.3-1.2-3.3-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 0 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.8.8.1-.6.3-1.1.6-1.3-2.2-.2-4.5-1.1-4.5-4.8 0-1.1.4-1.9 1-2.6-.1-.3-.4-1.3.1-2.6 0 0 .8-.3 2.7 1 .8-.2 1.6-.3 2.4-.3s1.7.1 2.4.3c1.8-1.2 2.7-1 2.7-1 .5 1.3.2 2.3.1 2.6.6.7 1 1.5 1 2.6 0 3.7-2.3 4.5-4.5 4.8.4.3.7.9.7 1.8V21c0 .3.2.6.7.5 3.9-1.3 6.7-4.9 6.7-9.2 0-5.3-4.3-9.7-9.7-9.7Z" />
+                    </svg>
                 </a>
-                <a href="Resume.pdf" download>
-                    <div class="resume-button">Download my resume</div>
+                <a href="https://mail.google.com/mail/?view=cm&to=oscar940327@gmail.com" target="_blank"
+                    aria-label="Email">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M4.5 6.2h15c.8 0 1.5.7 1.5 1.5v8.6c0 .8-.7 1.5-1.5 1.5h-15c-.8 0-1.5-.7-1.5-1.5V7.7c0-.8.7-1.5 1.5-1.5Zm.7 2.2 6.8 4.5 6.8-4.5H5.2Zm13.7 7.2v-5l-6.4 4.2c-.3.2-.7.2-1 0l-6.4-4.2v5h13.8Z" />
+                    </svg>
                 </a>
             </div>
+        </header>
 
-        </div>
-        <div class="selfie-and-contact">
-            <div class="profile-picture-desktop">
-                <img src="images/selfie2.png" alt="my selfie">
+        <footer class="site-credit">© Oscar Cheng</footer>
+    </div>
+    <button class="theme-toggle load-reveal" style="--reveal-delay: 0.28s;" type="button" aria-label="Toggle color theme">
+        <span></span>
+    </button>
+
+    <main class="portfolio-home">
+        <section class="hero-section" id="home">
+            <p class="role-label load-reveal" style="--reveal-delay: 0.16s;">CSIE Student / AI Builder</p>
+            <h1 class="hero-title">Oscar Cheng</h1>
+            <p class="hero-email load-reveal" style="--reveal-delay: 0.48s;">For opportunities, email me at<br>oscar940327@gmail.com</p>
+
+            <article class="about-block load-reveal" style="--reveal-delay: 0.62s;">
+                <h2>About Me</h2>
+                <p>
+                    I am a Computer Science student at National Changhua University of Education, currently preparing
+                    for CS master's applications abroad.
+                </p>
+                <p>
+                    My work focuses on AI applications, RAG systems, and practical
+                    software projects that turn ideas into usable products.
+                </p>
+            </article>
+        </section>
+
+        <section class="motivation-section">
+            <div class="section-copy scroll-reveal">
+                <h2>Motivation</h2>
+                <p>
+                    I enjoy building systems that connect learning, data, and real-world decision making. Recently, I
+                    have been exploring LLM-powered workflows, financial analysis tools, and knowledge graph prototypes.
+                </p>
+                <p>
+                    This site is a focused entry point for my projects, notes, and resume, designed for interviews,
+                    applications, and people who want to understand what I build.
+                </p>
             </div>
-            <div class="profile-picture-mobile">
-                <img src="images/selfie3.png" alt="my selfie">
-            </div>
-            <div class="contact-info">
-                <div class="contact-icons">
-                    <a href="https://github.com/oscar940327" target="_blank"><img src="images/github_icon.jpg"
-                            alt="GitHub"></a>
-                    <a href="#" target="_blank"><img src="images/linkedin_icon.png" alt="LinkedIn"></a>
-                    <a href="https://mail.google.com/mail/?view=cm&to=oscar940327@gmail.com" target="_blank"><img
-                            src="images/email_icon.png" alt="email"></a>
+
+            <figure class="home-portrait scroll-reveal" aria-label="Portrait of Oscar Cheng">
+                <img src="images/selfie5.jpg" alt="Oscar Cheng">
+            </figure>
+        </section>
+
+        <section class="skills-section load-reveal" style="--reveal-delay: 1s;">
+            <h2>Skills</h2>
+            <div class="skills-grid">
+                <div class="skill-group">
+                    <h3>AI / Data</h3>
+                    <div class="skill-tags">
+                        <span>Python</span>
+                        <span>RAG</span>
+                        <span>LLMs</span>
+                    </div>
                 </div>
-                <div class="email-text">oscar940327@gmail.com</div>
+
+                <div class="skill-group">
+                    <h3>Web / Backend</h3>
+                    <div class="skill-tags">
+                        <span>HTML</span>
+                        <span>CSS</span>
+                        <span>FastAPI</span>
+                    </div>
+                </div>
+
+                <div class="skill-group">
+                    <h3>Tools</h3>
+                    <div class="skill-tags">
+                        <span>Git</span>
+                        <span>Github</span>
+                        <span>OpenRouter</span>
+                        <span>Vercel</span>
+                        <span>Render </span>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
+        </section>
 
-    <div class="experience-heading">
-        - Experience -
-    </div>
+        <nav class="home-links load-reveal" style="--reveal-delay: 1.12s;" aria-label="Homepage links">
+            <a href="project_page.html">Project -></a>
+            <a href="timeline_page.html">Journey -></a>
+            <a href="https://hackmd.io/@RPGoscar" target="_blank">HackMD -></a>
+            <a href="Resume.pdf" download>Resume -></a>
+        </nav>
+    </main>
 
-    <div class="ncue-experience">
-        <div class="ncue-experience-title"><b>Undergraduate Student</b></div>
-        <div class="ncue-experience-period">National Changhua University of Education, September 2023 ~ June 2027</div>
-        <ul class="ncue-experience-detail">
-            <li>
-                Developed an <b>e-commerce website</b> using <b>HTML, CSS, JavaScript, PHP, and XAMPP</b>
-                (Sophomore Year - 2nd Semester).
-            </li>
-            <li>
-                Built a <b>Discord bot</b> for <b>US stock and GitHub news push notifications</b> using <b>Node.js</b>,
-                <b>with assistance from Gemini</b>
-                (Summer vacation between Sophomore & Junior Year).
-            </li>
-            <li>
-                Developed an automated <b>Financial Risk Knowledge Graph</b> pipeline using <b>Python</b> and
-                <b>LLMs (GPT-4o/5.2)</b>, <b>with assistance from Gemini</b>
-                (Winter vacation from first semester to second semester of Junior Year).
-            </li>
-            <li>
-                Engineered <b>CogniPath</b>, a dynamic <b>AI-Driven Learning Path Generator</b> using <b>Python</b>,
-                <b>NetworkX (DAGs)</b>, and <b>GPT-5.2</b> to automate and visualize complex knowledge decomposition
-                (Winter vacation from first semester to second semester of Junior Year).
-            </li>
-            <li>
-                Built a <b>Two-Stage RAG system</b> to analyze 100+ page financial reports.
-                Uses <b>vector search</b> for recall and <b>Cross-Encoder reranking</b> for precision,
-                with multi-turn conversation support and anti-hallucination mechanisms.
-            </li>
-            <li>
-                Built a <b>Personal Trading Signal System</b> using <b>Backtrader</b>,
-                <b>FinBERT/LLM Sentiment Analysis</b>, and <b>6-Dimension Technical Scoring</b>,
-                validated through a <b>4-year cross-bear-market backtest</b> on 14 US large-cap stocks
-                (first semester of Junior Year).
-            </li>
-        </ul>
-    </div>
-
-    <script src="header-placeholder.js" defer></script>
+    <script src="home-load.js" defer></script>
+    <script src="smooth-scroll.js?v=20260613-2" defer></script>
+    <script src="header-placeholder.js?v=20260613-11" defer></script>
 </body>
 
 </html>
