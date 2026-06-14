@@ -1,0 +1,37 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    min-height: 100%;
+    scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    display: none;
+}
+
+body {
+    --bg: #f1ecde;
+    --text: #2f2f2f;
+    --muted: #6b6b6b;
+    margin: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Poppins", "Plus Jakarta Sans", Arial, sans-serif;
+    transition: background-color 0.35s ease, color 0.35s ease;
+}
+
+body.dark-mode {
+    --bg: #101010;
+    --text: #e7e0d2;
+    --muted: #8f8a82;
+}
+
+.mkt-agent-page {
+    min-height: 100vh;
+}

@@ -11,7 +11,8 @@ const headerHTML = `
     <nav class="sidebar-menu">
         <a href="index.html">HOME</a>
         <a href="project_page.html">PROJECT</a>
-        <a href="timeline_page.html">TIMELINE</a>
+        <a href="timeline_page.html">JOURNEY</a>
+        <a href="mkt_agent.html">MktAgent</a>
         <span class="nav-indicator" aria-hidden="true"></span>
     </nav>
 
@@ -94,6 +95,9 @@ const headerHTML = `
 
             sidebarMenu.style.setProperty('--indicator-x', `${x}px`);
             sidebarMenu.style.setProperty('--indicator-y', `${y}px`);
+            if (isHorizontal) {
+                sidebarMenu.style.setProperty('--indicator-width', `${link.offsetWidth}px`);
+            }
             sidebarMenu.style.setProperty('--indicator-opacity', '1');
             sidebarMenu.style.setProperty('--indicator-scale', '1');
         };
