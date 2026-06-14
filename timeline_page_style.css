@@ -140,11 +140,21 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
     font-size: 0.9em;
     box-shadow: 0 2px 8px var(--shadow);
     border: 4px solid var(--dot-border);
+    opacity: 0;
+    transform: translateX(-50%) scale(0.72);
+    transition:
+        opacity 0.22s ease,
+        transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .timeline-dot span {
     text-align: center;
     width: 100%;
+}
+
+.timeline-dot.is-visible {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
 }
 
 .timeline-content {
@@ -156,14 +166,39 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
     position: relative;
     max-width: 320px;
     font-weight: 600;
+    opacity: 0;
+    transition:
+        opacity 0.14s ease,
+        clip-path 0.42s cubic-bezier(0.76, 0, 0.24, 1);
+    will-change: clip-path, opacity;
+}
+
+.timeline-content div {
+    clip-path: inset(0 100% 0 0);
+}
+
+.timeline-item.is-visible .timeline-content {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+}
+
+.timeline-item.left.is-visible .timeline-content,
+.timeline-item.right.is-visible .timeline-content {
+    clip-path: inset(0 0 0 0);
+}
+
+.timeline-item.is-visible .timeline-content div {
+    animation: timelineTyping 0.44s steps(var(--type-steps, 24), end) 0.18s forwards;
 }
 
 .timeline-item.left .timeline-content {
     margin-right: 75px;
+    clip-path: inset(0 0 0 100%);
 }
 
 .timeline-item.right .timeline-content {
     margin-left: 75px;
+    clip-path: inset(0 100% 0 0);
 }
 
 .timeline-item.left .timeline-content::before {
@@ -184,6 +219,16 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
     border-width: 10px 18px 10px 0;
     border-style: solid;
     border-color: transparent var(--surface) transparent transparent;
+}
+
+@keyframes timelineTyping {
+    from {
+        clip-path: inset(0 100% 0 0);
+    }
+
+    to {
+        clip-path: inset(0 0 0 0);
+    }
 }
 
 @media (max-width: 450px) {
@@ -303,5 +348,21 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
         border-radius: 8px;
         font-size: 0.86em;
         line-height: 1.45;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .timeline-dot {
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+        transition: none;
+    }
+
+    .timeline-content,
+    .timeline-content div {
+        opacity: 1;
+        clip-path: none;
+        transition: none;
+        animation: none;
     }
 }

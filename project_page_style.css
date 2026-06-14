@@ -35,6 +35,8 @@ body::-webkit-scrollbar {
 .works-showcase {
     position: relative;
     height: calc(var(--project-count, 4) * 100vh);
+    opacity: 0;
+    animation: projectPageFadeIn 1.18s ease 0.16s forwards;
 }
 
 .project-stage {
@@ -82,6 +84,16 @@ body::-webkit-scrollbar {
 body.dark-mode .project-visual img {
     opacity: 0.86;
     filter: saturate(0.84) contrast(1.04);
+}
+
+@keyframes projectPageFadeIn {
+    0% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 .project-info {
@@ -379,5 +391,12 @@ body.dark-mode .project-visual img {
     .project-actions a {
         padding: 11px 14px;
         font-size: 13px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .works-showcase {
+        opacity: 1;
+        animation: none;
     }
 }
