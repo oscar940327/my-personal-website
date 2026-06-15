@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap"
         rel="stylesheet" />
-    <link rel="stylesheet" href="mkt_agent_style.css?v=20260615-5">
+    <link rel="stylesheet" href="mkt_agent_style.css?v=20260615-6">
     <link rel="stylesheet" href="header_style.css?v=20260615-2">
     <link rel="icon" href="images/icon3.png" type="image/x-icon">
     <title>MktAgent</title>
@@ -56,23 +56,21 @@
                             <span>NASDAQ</span>
                         </div>
                         <label class="field-block" for="ticker-input">
-                            <input id="ticker-input" name="ticker" type="text" value="MU" maxlength="12" autocomplete="off">
+                            <input id="ticker-input" name="ticker" type="text" maxlength="12" autocomplete="off" placeholder="MU">
                         </label>
                     </section>
 
                     <section class="mkt-card field-card">
                         <h2>Question</h2>
                         <label class="field-block" for="question-input">
-                            <textarea id="question-input" name="question" rows="3">現在適合進場嗎？</textarea>
+                            <textarea id="question-input" name="question" rows="3" placeholder="現在適合進場嗎？"></textarea>
                         </label>
                     </section>
 
                     <section class="mkt-card field-card portfolio-field is-hidden">
                         <h2>Holdings</h2>
                         <label class="field-block" for="holdings-input">
-                            <textarea id="holdings-input" name="holdings" rows="5">VOO:5000
-QQQM:3000
-TSLA:2000</textarea>
+                            <textarea id="holdings-input" name="holdings" rows="5" placeholder="VOO:5000&#10;QQQM:3000&#10;TSLA:2000"></textarea>
                         </label>
                     </section>
 
@@ -155,7 +153,7 @@ TSLA:2000</textarea>
         </section>
     </main>
 
-    <script src="mkt-agent.js?v=20260615-1" defer></script>
+    <script src="mkt-agent.js?v=20260615-2" defer></script>
     <script src="header-placeholder.js?v=20260615-2" defer></script>
 </body>
 

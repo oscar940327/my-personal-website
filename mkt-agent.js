@@ -41,14 +41,6 @@ const setFormMode = () => {
     researchSignalCard.classList.toggle("is-hidden", isPortfolio);
     modeToggle.classList.toggle("is-portfolio", isPortfolio);
 
-    if (isPortfolio && questionInput.value.trim() === "現在適合進場嗎？") {
-        questionInput.value = "我目前持有這些股票，有什麼需要注意？";
-    }
-
-    if (!isPortfolio && questionInput.value.trim() === "我目前持有這些股票，有什麼需要注意？") {
-        questionInput.value = "現在適合進場嗎？";
-    }
-
     formNote.classList.remove("is-error");
     formNote.textContent = "LLM analyst is requested by default. If it fails, the backend returns a template fallback report.";
 };
