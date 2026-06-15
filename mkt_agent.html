@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap"
         rel="stylesheet" />
-    <link rel="stylesheet" href="mkt_agent_style.css?v=20260615-1">
+    <link rel="stylesheet" href="mkt_agent_style.css?v=20260615-5">
     <link rel="stylesheet" href="header_style.css?v=20260615-2">
     <link rel="icon" href="images/icon3.png" type="image/x-icon">
     <title>MktAgent</title>
@@ -22,8 +22,140 @@
         <span></span>
     </button>
 
-    <main class="mkt-agent-page" aria-label="MktAgent"></main>
+    <main class="mkt-agent-page" aria-label="MktAgent">
+        <section class="mkt-shell">
+            <header class="mkt-hero">
+                <div>
+                    <p class="mkt-kicker">Personal Investment Research Agent</p>
+                    <div class="title-line">
+                        <h1>MktAgent</h1>
+                        <span class="api-pill" id="api-status">127.0.0.1:8000</span>
+                    </div>
+                    <p class="mkt-intro">
+                        Ask about one stock or inspect portfolio risk through a controlled agent workflow.
+                    </p>
+                </div>
+            </header>
 
+            <section class="mkt-workspace" aria-label="Market agent workspace">
+                <form class="mkt-input-panel" id="mkt-agent-form">
+                    <fieldset class="mode-toggle" aria-label="Analysis mode">
+                        <label>
+                            <input type="radio" name="mode" value="single" checked>
+                            <span>Single Stock</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="mode" value="portfolio">
+                            <span>Portfolio</span>
+                        </label>
+                    </fieldset>
+
+                    <section class="mkt-card field-card single-field">
+                        <div class="card-title-row">
+                            <h2>Ticker</h2>
+                            <span>NASDAQ</span>
+                        </div>
+                        <label class="field-block" for="ticker-input">
+                            <input id="ticker-input" name="ticker" type="text" value="MU" maxlength="12" autocomplete="off">
+                        </label>
+                    </section>
+
+                    <section class="mkt-card field-card">
+                        <h2>Question</h2>
+                        <label class="field-block" for="question-input">
+                            <textarea id="question-input" name="question" rows="3">現在適合進場嗎？</textarea>
+                        </label>
+                    </section>
+
+                    <section class="mkt-card field-card portfolio-field is-hidden">
+                        <h2>Holdings</h2>
+                        <label class="field-block" for="holdings-input">
+                            <textarea id="holdings-input" name="holdings" rows="5">VOO:5000
+QQQM:3000
+TSLA:2000</textarea>
+                        </label>
+                    </section>
+
+                    <section class="mkt-card include-card">
+                        <h2>Include</h2>
+                        <div class="option-row" aria-label="Data options">
+                            <label>
+                                <input type="checkbox" id="include-news">
+                                <span>News</span>
+                            </label>
+                            <label>
+                                <input type="checkbox" id="include-fundamentals">
+                                <span>Fundamentals</span>
+                            </label>
+                            <label>
+                                <input type="checkbox" id="include-technicals">
+                                <span>Technicals</span>
+                            </label>
+                        </div>
+                    </section>
+
+                    <p class="form-note" id="form-note">LLM analyst is requested by default. If it fails, the backend returns a template fallback report.</p>
+
+                    <button class="analyze-button" type="submit">⌕ Analyze</button>
+                </form>
+
+                <section class="mkt-results" aria-live="polite">
+                    <section class="mkt-card signal-card" id="research-signal-card">
+                        <div class="card-title-row">
+                            <h2>Research Signal</h2>
+                            <span id="signal-label">Neutral</span>
+                        </div>
+                        <div class="signal-meter" aria-label="Research signal meter">
+                            <div class="signal-track">
+                                <span class="signal-pointer" id="signal-pointer"></span>
+                            </div>
+                            <div class="signal-labels">
+                                <span>明顯利空</span>
+                                <span>偏利空</span>
+                                <span>中立</span>
+                                <span>偏利多</span>
+                                <span>明顯利多</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="summary-card">
+                        <div class="summary-grid" id="summary-grid">
+                            <div><span>Mode</span><strong>Single Stock</strong></div>
+                            <div><span>Status</span><strong>Ready</strong></div>
+                            <div><span>Analyst</span><strong id="analyst-status">Waiting</strong></div>
+                        </div>
+                    </section>
+
+                    <section class="mkt-card report-card is-empty" id="report-card">
+                        <div class="card-title-row">
+                            <h2>Research Report</h2>
+                            <span id="response-status">No request yet</span>
+                        </div>
+                        <pre id="report-output">Run an analysis to generate a research report.</pre>
+                    </section>
+
+                    <div class="detail-grid">
+                        <section class="mkt-card">
+                            <h2>Agent Execution</h2>
+                            <dl class="execution-list" id="execution-list">
+                                <div><dt>Intent</dt><dd>-</dd></div>
+                                <div><dt>Plan</dt><dd>-</dd></div>
+                                <div><dt>Fallback</dt><dd>-</dd></div>
+                            </dl>
+                        </section>
+                    </div>
+
+                    <details class="mkt-card structured-data-card">
+                        <summary>Structured Data</summary>
+                        <pre id="json-output">{}</pre>
+                    </details>
+                </section>
+            </section>
+        </section>
+    </main>
+
+    <script src="mkt-agent.js?v=20260615-1" defer></script>
     <script src="header-placeholder.js?v=20260615-2" defer></script>
 </body>
 
