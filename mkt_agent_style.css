@@ -185,16 +185,14 @@ textarea {
 .field-card::before,
 .include-card::before,
 .signal-card::before,
-.report-card::before,
-.detail-grid .mkt-card::before {
+.report-card::before {
     content: none;
 }
 
 .field-card::after,
 .include-card::after,
 .signal-card::after,
-.report-card::after,
-.detail-grid .mkt-card::after {
+.report-card::after {
     content: none;
 }
 
@@ -225,7 +223,6 @@ textarea {
 .include-card,
 .signal-card,
 .report-card,
-.detail-grid .mkt-card,
 .structured-data-card {
     padding: 16px;
 }
@@ -467,6 +464,7 @@ body.dark-mode .field-block textarea {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
+    transform: translateY(-150px)
 }
 
 .signal-card {
@@ -497,7 +495,8 @@ body.dark-mode .summary-grid div {
 }
 
 .summary-grid span,
-.execution-list dt,
+.plan-list dt,
+.news-impact-list dt,
 .detail-list span {
     display: block;
     color: var(--muted);
@@ -508,7 +507,8 @@ body.dark-mode .summary-grid div {
 }
 
 .summary-grid strong,
-.execution-list dd,
+.plan-list dd,
+.news-impact-list dd,
 .detail-list strong {
     display: block;
     margin: 4px 0 0;
@@ -518,7 +518,7 @@ body.dark-mode .summary-grid div {
     overflow-wrap: anywhere;
 }
 
-#summary-grid div:nth-child(2) strong {
+#summary-grid div:nth-child(3) strong {
     color: var(--accent);
 }
 
@@ -584,12 +584,49 @@ body.dark-mode .summary-grid div {
     text-align: center;
 }
 
-.execution-list {
+.price-plan-row,
+.news-impact-row {
+    display: block;
+}
+
+.plan-list,
+.news-impact-list {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     margin: 0;
 }
+
+.plan-list div,
+.news-impact-list div {
+    min-width: 0;
+    min-height: 72px;
+    border-radius: 8px;
+    background: rgba(237, 233, 221, 0.55);
+    padding: 14px;
+    animation: pop-from-dot var(--entrance-duration) cubic-bezier(0.2, 0.85, 0.2, 1.25) var(--entrance-delay) both;
+}
+
+.plan-list div {
+    background: rgba(237, 233, 221, 0.72);
+    padding: 16px;
+}
+
+body.dark-mode .plan-list div,
+body.dark-mode .news-impact-list div {
+    background: rgba(255, 255, 255, 0.045);
+}
+
+body.dark-mode .plan-list div {
+    background: rgba(255, 255, 255, 0.055);
+}
+
+.plan-list dd,
+.news-impact-list dd {
+    margin-left: 0;
+}
+
+
 
 @keyframes trace-around {
     0% {
@@ -701,13 +738,10 @@ body.dark-mode .summary-grid div {
     }
 }
 
-.execution-list div,
+.plan-list div,
+.news-impact-list div,
 .detail-list div {
     min-width: 0;
-}
-
-.execution-list dd {
-    margin-left: 0;
 }
 
 .detail-list {
@@ -760,8 +794,12 @@ body.dark-mode .summary-grid div {
 }
 
 @media (max-width: 760px) {
-    .mkt-workspace,
-    .detail-grid {
+    .mkt-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .plan-list,
+    .news-impact-list {
         grid-template-columns: 1fr;
     }
 
