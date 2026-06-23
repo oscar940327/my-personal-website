@@ -1,4 +1,4 @@
-const API_BASE_URL = window.MARKET_AGENT_API_BASE_URL || "http://127.0.0.1:8000";
+﻿const API_BASE_URL = window.MARKET_AGENT_API_BASE_URL || "http://127.0.0.1:8000";
 
 const form = document.getElementById("mkt-agent-form");
 const modeInputs = Array.from(document.querySelectorAll('input[name="mode"]'));
@@ -32,7 +32,7 @@ window.setInterval(checkApiHealth, 15000);
 
 const getMode = () => modeInputs.find(input => input.checked)?.value || "single";
 
-const setFormMode = () => {
+const setFormMode = (shouldReplay = false) => {
     const mode = getMode();
     const isPortfolio = mode === "portfolio";
 
@@ -43,9 +43,13 @@ const setFormMode = () => {
 
     formNote.classList.remove("is-error");
     formNote.textContent = "LLM analyst is requested by default. If it fails, the backend returns a template fallback report.";
+
+    if (shouldReplay) {
+        replayVisibleEntranceAnimations();
+    }
 };
 
-modeInputs.forEach(input => input.addEventListener("change", setFormMode));
+modeInputs.forEach(input => input.addEventListener("change", () => setFormMode(true)));
 setFormMode();
 
 form.addEventListener("submit", async event => {
@@ -87,6 +91,36 @@ form.addEventListener("submit", async event => {
 
     await runAnalysis(endpoint, payload, mode);
 });
+
+function replayVisibleEntranceAnimations() {
+    const animatedElements = [
+        ".mkt-kicker",
+        ".mkt-hero h1",
+        ".mkt-intro",
+        ".form-note",
+        ".mkt-card",
+        ".mkt-card > :not(.trace-border-svg)",
+        ".trace-border-svg rect",
+        ".summary-grid div",
+        ".analyze-button",
+    ];
+
+    window.requestAnimationFrame(() => {
+        const elements = animatedElements.flatMap(selector =>
+            Array.from(document.querySelectorAll(selector))
+        ).filter(element => element.offsetParent !== null);
+
+        elements.forEach(element => {
+            element.style.animation = "none";
+        });
+
+        document.body.offsetHeight;
+
+        elements.forEach(element => {
+            element.style.animation = "";
+        });
+    });
+}
 
 function showFormError(message) {
     formNote.classList.add("is-error");
