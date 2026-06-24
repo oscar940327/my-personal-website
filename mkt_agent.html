@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap"
         rel="stylesheet" />
-    <link rel="stylesheet" href="mkt_agent_style.css?v=20260624-13">
+    <link rel="stylesheet" href="mkt_agent_style.css?v=20260625-1">
     <link rel="stylesheet" href="header_style.css?v=20260615-2">
     <link rel="icon" href="images/icon3.png" type="image/x-icon">
     <title>MktAgent</title>
@@ -32,7 +32,7 @@
                         <span class="api-pill" id="api-status">127.0.0.1:8000</span>
                     </div>
                     <p class="mkt-intro">
-                        Ask about one stock or inspect portfolio risk through a controlled agent workflow.
+                        Ask a market research question, or inspect portfolio risk through a controlled agent workflow.
                     </p>
                 </div>
             </header>
@@ -42,7 +42,7 @@
                     <fieldset class="mode-toggle" aria-label="Analysis mode">
                         <label>
                             <input type="radio" name="mode" value="single" checked>
-                            <span>Single Stock</span>
+                            <span>Research Question</span>
                         </label>
                         <label>
                             <input type="radio" name="mode" value="portfolio">
@@ -50,20 +50,10 @@
                         </label>
                     </fieldset>
 
-                    <section class="mkt-card field-card single-field">
-                        <div class="card-title-row">
-                            <h2>Ticker</h2>
-                            <span>NASDAQ</span>
-                        </div>
-                        <label class="field-block" for="ticker-input">
-                            <input id="ticker-input" name="ticker" type="text" maxlength="12" autocomplete="off" placeholder="MU">
-                        </label>
-                    </section>
-
                     <section class="mkt-card field-card">
                         <h2>Question</h2>
                         <label class="field-block" for="question-input">
-                            <textarea id="question-input" name="question" rows="3" placeholder="請分析這檔股票目前適不適合進場觀察"></textarea>
+                            <textarea id="question-input" name="question" rows="3" placeholder="MU 現在適合進場嗎？"></textarea>
                         </label>
                     </section>
 
@@ -158,7 +148,7 @@
         </section>
     </main>
 
-    <script src="mkt-agent.js?v=20260624-13" defer></script>
+    <script src="mkt-agent.js?v=20260625-1" defer></script>
     <script src="header-placeholder.js?v=20260615-2" defer></script>
 </body>
 

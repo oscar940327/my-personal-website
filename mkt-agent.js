@@ -2,14 +2,12 @@ const API_BASE_URL = window.MARKET_AGENT_API_BASE_URL || "http://127.0.0.1:8000"
 
 const form = document.getElementById("mkt-agent-form");
 const modeInputs = Array.from(document.querySelectorAll('input[name="mode"]'));
-const tickerInput = document.getElementById("ticker-input");
 const questionInput = document.getElementById("question-input");
 const holdingsInput = document.getElementById("holdings-input");
 const includeNewsInput = document.getElementById("include-news");
 const includeFundamentalsInput = document.getElementById("include-fundamentals");
 const includeTechnicalsInput = document.getElementById("include-technicals");
 const modeToggle = document.querySelector(".mode-toggle");
-const singleField = document.querySelector(".single-field");
 const portfolioField = document.querySelector(".portfolio-field");
 const formNote = document.getElementById("form-note");
 const apiStatus = document.getElementById("api-status");
@@ -36,7 +34,6 @@ const setFormMode = (shouldReplay = false) => {
     const mode = getMode();
     const isPortfolio = mode === "portfolio";
 
-    singleField.classList.toggle("is-hidden", isPortfolio);
     portfolioField.classList.toggle("is-hidden", !isPortfolio);
     researchSignalCard.classList.toggle("is-hidden", isPortfolio);
     modeToggle.classList.toggle("is-portfolio", isPortfolio);
@@ -63,7 +60,7 @@ form.addEventListener("submit", async event => {
         return;
     }
 
-    let endpoint = "/analyze/single";
+    let endpoint = "/query";
     let payload = {
         user_query: question,
         include_news: includeNewsInput.checked,
@@ -72,14 +69,7 @@ form.addEventListener("submit", async event => {
         analyst_mode: "llm",
     };
 
-    if (mode === "single") {
-        const ticker = tickerInput.value.trim().toUpperCase();
-        if (!ticker) {
-            showFormError("請先輸入股票代號。");
-            return;
-        }
-        payload.ticker = ticker;
-    } else {
+    if (mode === "portfolio") {
         const holdings = parseHoldings(holdingsInput.value);
         if (holdings.length === 0) {
             showFormError("請至少輸入一個持倉，例如 VOO:5000。");
@@ -236,14 +226,21 @@ function renderLoadingState(mode) {
 
 function renderResult(result, mode) {
     const data = result.data || {};
+    const resultMode = result.intent === "portfolio_analysis" ? "portfolio" : "single";
 
     responseStatus.textContent = result.status || "success";
     reportCard.classList.remove("is-empty");
     jsonOutput.textContent = JSON.stringify(result, null, 2);
 
-    if (mode === "portfolio") {
+    if (resultMode === "portfolio") {
         renderPortfolio(data);
         reportOutput.textContent = result.report || "No report returned.";
+    } else if (result.intent === "industry_trend" || result.intent === "backtest_query") {
+        renderResearchResult(result, data);
+        reportOutput.textContent = result.report || "No report returned.";
+    } else if (result.status && result.status !== "success") {
+        renderWorkflowMessage(result, data);
+        reportOutput.textContent = result.report || data.message || "No report returned.";
     } else {
         renderSingleStock(data);
         reportOutput.textContent = buildSingleStockReport(data);
@@ -251,6 +248,48 @@ function renderResult(result, mode) {
 
     formNote.classList.remove("is-error");
     formNote.textContent = "分析完成。價格區間是研究用計畫，不是投資建議。";
+}
+
+function renderResearchResult(result, data) {
+    signalPointer.style.left = "50%";
+    signalLabel.textContent = "中立";
+
+    if (result.intent === "industry_trend") {
+        const scanScope = data.scan_scope || {};
+        const sectorSummary = data.sector_summary || {};
+        summaryGrid.innerHTML = renderSummaryItems([
+            ["估值", "主題掃描"],
+            ["技術", `${scanScope.scanned_ticker_count || 0} 檔標的`],
+            ["結論", sectorSummary.strongest_ticker ? `關注 ${sectorSummary.strongest_ticker}` : "等待更多資料"],
+        ]);
+    } else if (result.intent === "backtest_query") {
+        summaryGrid.innerHTML = renderSummaryItems([
+            ["估值", "回測不適用"],
+            ["技術", data.strategy || "策略回測"],
+            ["結論", data.status === "success" ? "查看歷史表現" : "需要更多條件"],
+        ]);
+    } else {
+        summaryGrid.innerHTML = renderSummaryItems([
+            ["估值", "未分類"],
+            ["技術", "未分類"],
+            ["結論", result.status || "需要更多資料"],
+        ]);
+    }
+
+    renderPricePlan({});
+    renderNewsImpact({});
+}
+
+function renderWorkflowMessage(result, data) {
+    signalPointer.style.left = "50%";
+    signalLabel.textContent = "中立";
+    summaryGrid.innerHTML = renderSummaryItems([
+        ["估值", "無法分析"],
+        ["技術", "需要更多資料"],
+        ["結論", data.message || result.status || "需要補充條件"],
+    ]);
+    renderPricePlan({});
+    renderNewsImpact({});
 }
 
 async function checkApiHealth() {

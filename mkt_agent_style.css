@@ -262,7 +262,7 @@ textarea {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.16);
     width: calc(2 * var(--mode-segment-width) + 6px);
-    --mode-segment-width: 122px;
+    --mode-segment-width: 174px;
 }
 
 .mode-toggle::before {
