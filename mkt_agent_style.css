@@ -133,8 +133,41 @@ textarea {
     padding: 0 10px;
     background: var(--soft);
     color: var(--muted);
-    font-size: 10px;
+    font-size: 12px;
     white-space: nowrap;
+}
+
+.card-title-row span.is-high {
+    border-color: rgba(48, 126, 89, 0.28);
+    background: rgba(48, 126, 89, 0.12);
+    color: #2f7d58;
+}
+
+.card-title-row span.is-medium {
+    border-color: rgba(178, 127, 52, 0.28);
+    background: rgba(178, 127, 52, 0.13);
+    color: #946626;
+}
+
+.card-title-row span.is-low-to-medium {
+    border-color: rgba(170, 115, 52, 0.28);
+    background: rgba(170, 115, 52, 0.1);
+    color: #805923;
+}
+
+.card-title-row span.is-low,
+.card-title-row span.is-none,
+.card-title-row span.is-error {
+    border-color: rgba(176, 75, 63, 0.3);
+    background: rgba(176, 75, 63, 0.12);
+    color: #9f4238;
+}
+
+.card-title-row span.is-running,
+.card-title-row span.is-neutral {
+    border-color: var(--line);
+    background: var(--soft);
+    color: var(--muted);
 }
 
 .api-pill {
@@ -560,6 +593,14 @@ body.dark-mode .summary-grid div {
     min-height: clamp(280px, 34vh, 440px);
 }
 
+.report-card,
+#report-output,
+.structured-data-card,
+#json-output {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 .report-card pre,
 .structured-data-card pre {
     margin: 0;
@@ -756,10 +797,6 @@ body.dark-mode .plan-list div {
     font-style: italic;
 }
 
-.structured-data-card {
-    display: none;
-}
-
 .structured-data-card summary {
     cursor: pointer;
     font-size: 12px;
@@ -769,7 +806,7 @@ body.dark-mode .plan-list div {
 
 .structured-data-card pre {
     margin-top: 14px;
-    max-height: 320px;
+    max-height: 240px;
     overflow: auto;
     color: var(--muted);
     font-size: 12px;

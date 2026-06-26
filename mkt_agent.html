@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap"
         rel="stylesheet" />
-    <link rel="stylesheet" href="mkt_agent_style.css?v=20260625-1">
+    <link rel="stylesheet" href="mkt_agent_style.css?v=20260626-2">
     <link rel="stylesheet" href="header_style.css?v=20260615-2">
     <link rel="icon" href="images/icon3.png" type="image/x-icon">
     <title>MktAgent</title>
@@ -68,15 +68,15 @@
                         <h2>Include</h2>
                         <div class="option-row" aria-label="Data options">
                             <label>
-                                <input type="checkbox" id="include-news">
+                                <input type="checkbox" id="include-news" checked>
                                 <span>News</span>
                             </label>
                             <label>
-                                <input type="checkbox" id="include-fundamentals">
+                                <input type="checkbox" id="include-fundamentals" checked>
                                 <span>Fundamentals</span>
                             </label>
                             <label>
-                                <input type="checkbox" id="include-technicals">
+                                <input type="checkbox" id="include-technicals" checked>
                                 <span>Technicals</span>
                             </label>
                         </div>
@@ -85,6 +85,11 @@
                     <p class="form-note" id="form-note">預設使用 LLM analyst；如果 LLM 無法使用，後端會回傳 rule-based fallback。</p>
 
                     <button class="analyze-button" type="submit">⌕ Analyze</button>
+
+                    <details class="mkt-card structured-data-card">
+                        <summary>Structured Data</summary>
+                        <pre id="json-output">{}</pre>
+                    </details>
                 </form>
 
                 <section class="mkt-results" aria-live="polite">
@@ -125,9 +130,9 @@
 
                     <section class="news-impact-row">
                         <dl class="news-impact-list" id="news-impact-list">
-                            <div><dt>新聞情緒</dt><dd>-</dd></div>
-                            <div><dt>影響程度</dt><dd>-</dd></div>
-                            <div><dt>影響類型</dt><dd>-</dd></div>
+                            <div><dt>新聞方向</dt><dd>-</dd></div>
+                            <div><dt>影響強度</dt><dd>-</dd></div>
+                            <div><dt>主要影響</dt><dd>-</dd></div>
                         </dl>
                     </section>
 
@@ -139,16 +144,12 @@
                         <pre id="report-output">Run an analysis to generate a research report.</pre>
                     </section>
 
-                    <details class="mkt-card structured-data-card">
-                        <summary>Structured Data</summary>
-                        <pre id="json-output">{}</pre>
-                    </details>
                 </section>
             </section>
         </section>
     </main>
 
-    <script src="mkt-agent.js?v=20260625-1" defer></script>
+    <script src="mkt-agent.js?v=20260626-3" defer></script>
     <script src="header-placeholder.js?v=20260615-2" defer></script>
 </body>
 

@@ -172,7 +172,7 @@ function parseHoldings(rawValue) {
 async function runAnalysis(endpoint, payload, mode) {
     analyzeButton.disabled = true;
     analyzeButton.textContent = "Analyzing...";
-    responseStatus.textContent = "Running";
+    setReportStatus("Running", "running");
     reportCard.classList.add("is-empty");
     reportOutput.textContent = "Analyzing structured market data...";
     formNote.classList.remove("is-error");
@@ -194,9 +194,9 @@ async function runAnalysis(endpoint, payload, mode) {
             throw new Error(result.detail || `Request failed: ${response.status}`);
         }
 
-        renderResult(result, mode);
+        renderResult(result, mode, payload);
     } catch (error) {
-        responseStatus.textContent = "Error";
+        setReportStatus("Error", "error");
         summaryGrid.innerHTML = renderSummaryItems([
             ["估值", "無法分析"],
             ["技術", "無法分析"],
@@ -207,7 +207,7 @@ async function runAnalysis(endpoint, payload, mode) {
         reportOutput.textContent = `Unable to reach Market Agent API.
 
 ${error.message}`;
-        jsonOutput.textContent = JSON.stringify({ error: error.message }, null, 2);
+        jsonOutput.textContent = JSON.stringify(buildStructuredDebugView(withRequestOptions({ error: error.message }, payload)), null, 2);
     } finally {
         analyzeButton.disabled = false;
         analyzeButton.textContent = "⌕ Analyze";
@@ -224,13 +224,13 @@ function renderLoadingState(mode) {
     renderNewsImpact({});
 }
 
-function renderResult(result, mode) {
+function renderResult(result, mode, payload) {
     const data = result.data || {};
     const resultMode = result.intent === "portfolio_analysis" ? "portfolio" : "single";
 
-    responseStatus.textContent = result.status || "success";
+    setReportStatus(buildEvidenceStatusLabel(result, data), getEvidenceStatusLevel(result, data));
     reportCard.classList.remove("is-empty");
-    jsonOutput.textContent = JSON.stringify(result, null, 2);
+    jsonOutput.textContent = JSON.stringify(buildStructuredDebugView(withRequestOptions(result, payload)), null, 2);
 
     if (resultMode === "portfolio") {
         renderPortfolio(data);
@@ -248,6 +248,208 @@ function renderResult(result, mode) {
 
     formNote.classList.remove("is-error");
     formNote.textContent = "分析完成。價格區間是研究用計畫，不是投資建議。";
+}
+
+function setReportStatus(label, level = "neutral") {
+    responseStatus.textContent = label;
+    responseStatus.classList.remove(
+        "is-high",
+        "is-medium",
+        "is-low-to-medium",
+        "is-low",
+        "is-none",
+        "is-running",
+        "is-error",
+        "is-neutral"
+    );
+    responseStatus.classList.add(`is-${level.replaceAll("_", "-")}`);
+}
+
+function buildEvidenceStatusLabel(result, data) {
+    if (result.status && result.status !== "success") {
+        return result.status;
+    }
+
+    const evidenceLevel = getEvidenceStatusLevel(result, data);
+
+    if (evidenceLevel === "neutral") {
+        return result.status || "success";
+    }
+
+    return `Evidence: ${evidenceLevel}`;
+}
+
+function getEvidenceStatusLevel(result, data) {
+    const evidenceQuality = data.evidence_quality
+        || data.research_profile?.evidence_quality
+        || {};
+    const level = evidenceQuality.level;
+
+    if (!level) {
+        return result.status === "success" ? "neutral" : "error";
+    }
+
+    return level;
+}
+
+function withRequestOptions(result, payload) {
+    return {
+        ...result,
+        request_options: {
+            include_news: Boolean(payload.include_news),
+            include_fundamentals: Boolean(payload.include_fundamentals),
+            include_technicals: Boolean(payload.include_technicals),
+        },
+    };
+}
+
+function buildStructuredDebugView(result) {
+    const data = result.data || {};
+
+    if (result.error && !data.status) {
+        return {
+            status: result.status || "error",
+            error: result.error,
+            request_options: result.request_options || {},
+        };
+    }
+
+    if (result.intent === "single_stock_analysis") {
+        return buildSingleStockDebugView(result, data);
+    }
+
+    if (result.intent === "backtest_query") {
+        return buildBacktestDebugView(result, data);
+    }
+
+    if (result.intent === "industry_trend") {
+        return buildThemeDebugView(result, data);
+    }
+
+    if (result.intent === "portfolio_analysis") {
+        return buildPortfolioDebugView(result, data);
+    }
+
+    return {
+        status: result.status,
+        intent: result.intent,
+        request_options: result.request_options || {},
+        route: result.route || {},
+        error: result.error || null,
+    };
+}
+
+function buildSingleStockDebugView(result, data) {
+    const technical = data.technical_analysis || {};
+    const signals = data.signals || {};
+    const decision = buildSingleStockDecision(data);
+    const newsSummary = data.news_analysis?.summary || {};
+    const fundamentals = data.fundamentals || {};
+    const backtestEvidence = data.backtest_evidence || {};
+
+    return {
+        status: result.status,
+        intent: result.intent,
+        ticker: data.ticker,
+        request_options: result.request_options || {},
+        route: result.route || {},
+        summary: decision,
+        technical: {
+            current_price: technical.current_price,
+            ma20: technical.ma20,
+            ma50: technical.ma50,
+            rsi_14: technical.rsi14,
+            macd_histogram: technical.macd_histogram,
+            momentum_state: technical.momentum_state,
+            signals: {
+                breakout: Boolean(signals.breakout?.is_breakout),
+                volume_surge: Boolean(signals.volume_surge?.is_volume_surge),
+                pullback: Boolean(signals.pullback?.is_pullback),
+            },
+        },
+        news: {
+            total_items: newsSummary.total_items || 0,
+            sentiment: newsSummary.sentiment || "unknown",
+            high_importance_count: newsSummary.high_importance_count || 0,
+            top_topics: newsSummary.top_topics || {},
+        },
+        fundamentals: {
+            status: fundamentals.status,
+            stance: fundamentals.summary?.stance,
+            positives: fundamentals.summary?.positives || [],
+            risks: fundamentals.summary?.risks || [],
+        },
+        backtest_evidence: summarizeBacktestEvidence(backtestEvidence),
+        evidence_quality: data.evidence_quality || data.research_profile?.evidence_quality || {},
+        analyst: result.analyst || {},
+        error: result.error || null,
+    };
+}
+
+function buildBacktestDebugView(result, data) {
+    const evidenceQuality = data.evidence_quality || {};
+
+    return {
+        status: result.status,
+        intent: result.intent,
+        ticker: data.ticker,
+        strategy: data.strategy,
+        request_options: result.request_options || {},
+        route: result.route || {},
+        data_window: data.data_window || {},
+        metrics: data.report?.metrics || {},
+        evidence_quality: evidenceQuality,
+        analyst: result.analyst || {},
+        error: result.error || null,
+    };
+}
+
+function buildThemeDebugView(result, data) {
+    return {
+        status: result.status,
+        intent: result.intent,
+        theme_key: data.theme_key,
+        theme_name: data.theme_name,
+        request_options: result.request_options || {},
+        route: result.route || {},
+        scan_scope: data.scan_scope || {},
+        sector_summary: data.sector_summary || {},
+        evidence_quality: data.evidence_quality || {},
+        analyst: result.analyst || {},
+        error: result.error || null,
+    };
+}
+
+function buildPortfolioDebugView(result, data) {
+    return {
+        status: result.status,
+        intent: result.intent,
+        request_options: result.request_options || {},
+        route: result.route || {},
+        portfolio_summary: data.portfolio_summary || {},
+        risk_summary: data.risk_summary || {},
+        concentration: data.concentration || {},
+        theme_exposure: data.theme_exposure || {},
+        error: result.error || null,
+    };
+}
+
+function summarizeBacktestEvidence(backtestEvidence = {}) {
+    return {
+        status: backtestEvidence.status,
+        triggered_signal_count: backtestEvidence.summary?.triggered_signal_count || 0,
+        strategies: backtestEvidence.summary?.strategies || [],
+        best_evidence_level: backtestEvidence.summary?.best_evidence_level,
+        signals: (backtestEvidence.signals || []).map(signal => ({
+            strategy: signal.strategy,
+            label: signal.label,
+            sample_size: signal.sample_size,
+            horizons: signal.horizons,
+            average_return: signal.average_return,
+            max_loss: signal.max_loss,
+            evidence_quality: signal.evidence_quality,
+        })),
+    };
 }
 
 function renderResearchResult(result, data) {
@@ -501,9 +703,9 @@ function renderNewsImpact(data) {
 
     if (!totalItems) {
         newsImpactList.innerHTML = renderDefinitionItems([
-            ["新聞情緒", "未納入"],
-            ["影響程度", "低"],
-            ["影響類型", "沒有新聞資料"],
+            ["新聞方向", "未納入"],
+            ["影響強度", "低"],
+            ["主要影響", "沒有新聞資料"],
         ]);
         return;
     }
@@ -516,9 +718,9 @@ function renderNewsImpact(data) {
     const sentimentLabel = sentiment === "positive" ? "偏利多" : sentiment === "negative" ? "偏利空" : "中立";
 
     newsImpactList.innerHTML = renderDefinitionItems([
-        ["新聞情緒", sentimentLabel],
-        ["影響程度", impactLevel],
-        ["影響類型", impactType],
+        ["新聞方向", sentimentLabel],
+        ["影響強度", impactLevel],
+        ["主要影響", impactType],
     ]);
 }
 
@@ -590,8 +792,10 @@ function buildResearchSummaryText(data) {
     const ticker = data.ticker || "這檔股票";
     const decision = buildSingleStockDecision(data);
     const profile = data.research_profile || {};
+    const evidenceQuality = data.evidence_quality || profile.evidence_quality || {};
     const confidence = profile.research_confidence || "unknown";
-    return ticker + "目前結論為「" + decision.conclusion + "」。估值判斷是「" + decision.valuation + "」，技術面是「" + decision.technical + "」，研究信心為 " + confidence + "。";
+    const evidenceLevel = evidenceQuality.level || confidence;
+    return ticker + "目前結論為「" + decision.conclusion + "」。估值判斷是「" + decision.valuation + "」，技術面是「" + decision.technical + "」，研究信心為 " + confidence + "，證據品質為 " + evidenceLevel + "。";
 }
 
 function buildFundamentalAnalysisText(data) {
@@ -639,6 +843,11 @@ function buildTechnicalAnalysisText(data) {
     const currentPrice = Number(technical.current_price);
     const ma20 = Number(technical.ma20);
     const ma50 = Number(technical.ma50);
+    const rsi14 = Number(technical.rsi14);
+    const macd = Number(technical.macd);
+    const macdSignal = Number(technical.macd_signal);
+    const macdHistogram = Number(technical.macd_histogram);
+    const momentumState = technical.momentum_state || "neutral";
     const parts = ["目前技術判斷為「" + technicalLabel + "」。"];
     if (Number.isFinite(currentPrice)) {
         parts.push("股價約 " + formatMoney(currentPrice) + "。");
@@ -649,6 +858,13 @@ function buildTechnicalAnalysisText(data) {
     if (Number.isFinite(ma50)) {
         parts.push("MA50 約 " + formatMoney(ma50) + "。");
     }
+    if (Number.isFinite(rsi14)) {
+        parts.push("RSI 14 為 " + rsi14.toFixed(1) + "，" + describeRsi(rsi14));
+    }
+    if (Number.isFinite(macd) && Number.isFinite(macdSignal) && Number.isFinite(macdHistogram)) {
+        parts.push("MACD 為 " + macd.toFixed(4) + "，signal 為 " + macdSignal.toFixed(4) + "，histogram 為 " + macdHistogram.toFixed(4) + "。");
+    }
+    parts.push(describeMomentumState(momentumState));
     if (signals.breakout?.is_breakout) {
         parts.push("價格有突破訊號，但仍需確認是否能延續。");
     }
@@ -661,7 +877,60 @@ function buildTechnicalAnalysisText(data) {
     if (technical.short_term_trend === "weak" || technical.is_above_ma20 === false) {
         parts.push("若尚未站回關鍵均線，立即進場信心較低。");
     }
+    parts.push(buildHistoricalSignalEvidenceText(data.backtest_evidence));
     return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function buildHistoricalSignalEvidenceText(backtestEvidence = {}) {
+    const signals = Array.isArray(backtestEvidence.signals) ? backtestEvidence.signals : [];
+
+    if (backtestEvidence.status === "no_triggered_signals" || signals.length === 0) {
+        return "歷史訊號參考：目前沒有明確突破、放量或回踩訊號，因此本次不附加歷史訊號參考。";
+    }
+
+    if (backtestEvidence.status && backtestEvidence.status !== "success") {
+        const message = backtestEvidence.summary?.message || "歷史資料不足，暫時無法建立歷史訊號參考。";
+        return "歷史訊號參考：" + message;
+    }
+
+    const lines = ["歷史訊號參考："];
+
+    signals.forEach(signal => {
+        const label = signal.label || getStrategyLabel(signal.strategy);
+        const sampleSize = Number(signal.sample_size || 0);
+        const evidenceLevel = signal.evidence_quality?.level || "unknown";
+        const averageReturn = Number(signal.average_return);
+        const maxLoss = Number(signal.max_loss);
+
+        lines.push("目前出現" + label + "。過去 15 年出現類似訊號 " + sampleSize + " 次。");
+        lines.push("5 個交易日後上漲勝率：" + formatPercent(signal.horizons?.["5"]?.win_rate));
+        lines.push("10 個交易日後上漲勝率：" + formatPercent(signal.horizons?.["10"]?.win_rate));
+        lines.push("20 個交易日後上漲勝率：" + formatPercent(signal.horizons?.["20"]?.win_rate));
+
+        if (Number.isFinite(averageReturn)) {
+            lines.push("20 個交易日平均報酬：" + formatSignedPercent(averageReturn));
+        }
+
+        if (Number.isFinite(maxLoss)) {
+            lines.push("歷史最大虧損：" + formatSignedPercent(maxLoss));
+        }
+
+        lines.push("證據品質：" + evidenceLevel + "。");
+    });
+
+    lines.push("這些數字只代表過去類似技術訊號的歷史表現，不代表未來一定會重複，也不構成買賣建議。");
+
+    return lines.join(" ");
+}
+
+function getStrategyLabel(strategy) {
+    const labels = {
+        breakout: "突破訊號",
+        volume_surge: "放量訊號",
+        pullback: "回踩訊號",
+    };
+
+    return labels[strategy] || "技術訊號";
 }
 
 function buildNewsReportText(data) {
@@ -683,10 +952,60 @@ function buildNewsReportText(data) {
 function buildOverallAssessmentText(data) {
     const decision = buildSingleStockDecision(data);
     const profile = data.research_profile || {};
+    const evidenceQuality = data.evidence_quality || profile.evidence_quality || {};
     const riskLevel = profile.risk_level || "unknown";
     const combinedScore = Number(profile.combined_score);
     const scoreText = Number.isFinite(combinedScore) ? "綜合分數為 " + combinedScore.toFixed(2) + "。" : "綜合分數目前不足。";
-    return scoreText + " 基本面、技術面與新聞面合併後，目前結論為「" + decision.conclusion + "」，風險等級為 " + riskLevel + "。價格計畫可作為後續觀察區間，但不代表現在一定適合進場。";
+    const evidenceText = buildEvidenceQualityText(evidenceQuality);
+    return scoreText + " 基本面、技術面與新聞面合併後，目前結論為「" + decision.conclusion + "」，風險等級為 " + riskLevel + "。" + evidenceText + " 價格計畫可作為後續觀察區間，但不代表現在一定適合進場。";
+}
+
+function describeRsi(rsi14) {
+    if (rsi14 >= 70) {
+        return "代表短線偏熱，追高要更謹慎。";
+    }
+
+    if (rsi14 <= 30) {
+        return "代表短線偏弱或超跌，適合觀察是否出現反彈確認。";
+    }
+
+    if (rsi14 >= 55) {
+        return "代表買盤動能偏強。";
+    }
+
+    if (rsi14 <= 45) {
+        return "代表賣壓仍偏明顯。";
+    }
+
+    return "代表短線動能大致中性。";
+}
+
+function describeMomentumState(momentumState) {
+    const descriptions = {
+        bullish_but_overbought: "RSI 與 MACD 顯示多方動能仍在，但 RSI 已偏高，短線不適合用追價心態看待。",
+        bearish_but_oversold: "RSI 與 MACD 顯示空方動能仍在，但 RSI 已偏低，後續可觀察是否有止跌或反彈確認。",
+        bullish_momentum: "RSI 與 MACD 顯示多方動能增強，短線買盤相對占優。",
+        bearish_momentum: "RSI 與 MACD 顯示空方動能仍在，短線賣壓相對占優。",
+        turning_positive: "MACD 動能正在轉正，但還需要價格與量能確認是否延續。",
+        turning_negative: "MACD 動能正在轉弱，短線需要留意上漲力道不足。",
+        neutral: "RSI 與 MACD 目前沒有給出明確方向。",
+    };
+
+    return descriptions[momentumState] || "RSI 與 MACD 目前訊號不明確，需要搭配價格位置一起看。";
+}
+
+function buildEvidenceQualityText(evidenceQuality) {
+    if (!evidenceQuality || !evidenceQuality.level) {
+        return " 目前沒有足夠的證據品質資料。";
+    }
+
+    const parts = ["證據品質為 " + evidenceQuality.level];
+
+    if (evidenceQuality.peer_group === "not_used" || evidenceQuality.market_wide === "not_used") {
+        parts.push("目前尚未納入同產業或全市場相似案例驗證");
+    }
+
+    return " " + parts.join("，") + "。詳細資訊放在 Structured Data。";
 }
 
 function buildRiskReminderText() {
@@ -721,6 +1040,27 @@ function formatMoney(value) {
     }
 
     return `$${value.toFixed(value >= 100 ? 0 : 2)}`;
+}
+
+function formatPercent(value) {
+    const numberValue = Number(value);
+
+    if (!Number.isFinite(numberValue)) {
+        return "-";
+    }
+
+    return (numberValue * 100).toFixed(1) + "%";
+}
+
+function formatSignedPercent(value) {
+    const numberValue = Number(value);
+
+    if (!Number.isFinite(numberValue)) {
+        return "-";
+    }
+
+    const sign = numberValue > 0 ? "+" : "";
+    return sign + (numberValue * 100).toFixed(1) + "%";
 }
 
 function escapeHTML(value) {
