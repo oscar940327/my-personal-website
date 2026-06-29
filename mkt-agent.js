@@ -380,6 +380,7 @@ function buildSingleStockDebugView(result, data) {
             risks: fundamentals.summary?.risks || [],
         },
         backtest_evidence: summarizeBacktestEvidence(backtestEvidence),
+        ml_research: data.ml_research || data.agent_outputs?.ml_research || {},
         evidence_quality: data.evidence_quality || data.research_profile?.evidence_quality || {},
         analyst: result.analyst || {},
         error: result.error || null,
@@ -783,6 +784,7 @@ function buildSingleStockReport(data) {
         ["基本面分析", buildFundamentalAnalysisText(data)],
         ["技術面分析", buildTechnicalAnalysisText(data)],
         ["新聞面分析", buildNewsReportText(data)],
+        ["ML Reference", buildMlReferenceText(data)],
         ["綜合評估", buildOverallAssessmentText(data)],
         ["風險提醒", buildRiskReminderText()],
     ].map(([title, body]) => title + "\n" + body).join("\n\n");
@@ -949,6 +951,178 @@ function buildNewsReportText(data) {
     return buildNewsAnalysisText({ sentiment, sentimentLabel, impactLevel, impactType, technicalLabel: getTechnicalLabel(data) });
 }
 
+function buildMlReferenceText(data) {
+    const mlResearch = data.ml_research || data.agent_outputs?.ml_research || {};
+
+    if (!mlResearch || mlResearch.status !== "success") {
+        const reason = mlResearch.reason || mlResearch.status || "missing ml_research output";
+        const message = mlResearch.message ? " " + mlResearch.message : "";
+        return "這次沒有可用的機器學習參考。原因：" + reason + "。" + message;
+    }
+
+    const lines = [
+        "以下是模型根據歷史資料、技術特徵、市場環境與新聞摘要產生的參考，不會直接改變本次結論或價格計畫。",
+        "",
+        "上漲與風險機率：",
+    ];
+    const targets = mlResearch.targets || {};
+    const targetLabels = [
+        ["up_5d", "5 個交易日後上漲機率"],
+        ["up_10d", "10 個交易日後上漲機率"],
+        ["up_20d", "20 個交易日後上漲機率"],
+        ["large_drop_20d", "20 個交易日內中途大跌風險"],
+    ];
+
+    targetLabels.forEach(([key, label]) => {
+        const target = targets[key];
+        if (!target) {
+            return;
+        }
+
+        const probability = Number(target.probability);
+        const probabilityText = Number.isFinite(probability)
+            ? formatPercent(probability)
+            : target.probability_percent || "-";
+        const signalLabel = target.signal_label ? "，" + translateMlSignalLabel(target.signal_label) : "";
+        lines.push("- " + label + "：" + probabilityText + signalLabel + "。");
+    });
+
+    const returnReference = mlResearch.return_reference || {};
+    if (hasReturnReferenceDetails(returnReference)) {
+        lines.push("");
+        lines.push("歷史相似情境參考：");
+        lines.push(...buildReturnReferenceLines(returnReference));
+    }
+
+    const returnModel = mlResearch.return_model || {};
+    if (returnModel.status === "success") {
+        lines.push("");
+        lines.push("報酬模型估算：");
+        lines.push("- 這是第一版實驗模型，仍以歷史區間作為主要參考。");
+        lines.push(...buildReturnModelLines(returnModel));
+    } else if (returnModel.status || returnModel.reason) {
+        const reason = returnModel.reason || returnModel.status;
+        lines.push("");
+        lines.push("報酬模型估算：");
+        lines.push("- 這次沒有可用的報酬模型估算。原因：" + reason + "。");
+    }
+
+    return lines.join("\n");
+}
+
+function hasReturnReferenceDetails(returnReference) {
+    if (!returnReference) {
+        return false;
+    }
+
+    return Boolean(
+        returnReference.sample_size
+        || returnReference.expected_return_range_5d
+        || returnReference.expected_return_range_10d
+        || returnReference.expected_return_range_20d
+        || returnReference.max_drop_range_20d
+    );
+}
+
+function buildReturnReferenceLines(returnReference) {
+    const parts = [];
+    const sampleSize = Number(returnReference.sample_size);
+    const evidenceQuality = returnReference.evidence_quality;
+
+    if (Number.isFinite(sampleSize)) {
+        parts.push("- 相似樣本數：" + sampleSize + " 筆。");
+    }
+
+    if (evidenceQuality) {
+        parts.push("- 證據品質：" + translateQualityLabel(evidenceQuality) + "。");
+    }
+
+    ["5d", "10d", "20d"].forEach(horizon => {
+        const range = returnReference["expected_return_range_" + horizon];
+        const average = returnReference["historical_average_return_" + horizon];
+        const rangeText = formatRangePercent(range);
+        const averageText = formatSignedPercent(average);
+        const horizonLabel = translateHorizonLabel(horizon);
+
+        if (rangeText !== "-") {
+            parts.push("- " + horizonLabel + "歷史報酬區間：" + rangeText + "。");
+        }
+
+        if (averageText !== "-") {
+            parts.push("- " + horizonLabel + "歷史平均報酬：" + averageText + "。");
+        }
+    });
+
+    const maxDropRange = formatRangePercent(returnReference.max_drop_range_20d);
+    if (maxDropRange !== "-") {
+        parts.push("- 20 個交易日內中途最大跌幅區間：" + maxDropRange + "。");
+    }
+
+    return parts.length ? parts : ["- 目前沒有足夠的歷史區間資料。"];
+}
+
+function buildReturnModelLines(returnModel) {
+    const targets = returnModel.targets || {};
+    const labels = [
+        ["forward_return_5d", "模型估算 5 個交易日報酬"],
+        ["forward_return_10d", "模型估算 10 個交易日報酬"],
+        ["forward_return_20d", "模型估算 20 個交易日報酬"],
+        ["max_drop_20d", "模型估算 20 個交易日內中途最大跌幅"],
+    ];
+
+    return labels.map(([key, label]) => {
+        const target = targets[key];
+        if (!target) {
+            return null;
+        }
+
+        const value = formatSignedPercent(target.predicted_value);
+        const range = formatRangePercent(target.predicted_range);
+        const quality = translateQualityLabel(target.model_quality || "unknown");
+        const rangeText = range === "-" ? "" : "，估算區間 " + range;
+        return "- " + label + "：" + value + rangeText + "，模型品質 " + quality + "。";
+    }).filter(Boolean);
+}
+
+function translateMlSignalLabel(label) {
+    const normalizedLabel = String(label || "").toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+    const labels = {
+        bullish: "偏多",
+        bearish: "偏空",
+        slightly_bullish: "稍微偏多",
+        slightly_bearish: "稍微偏空",
+        unclear_direction: "方向不明確",
+        high_large_drop_risk: "中途大跌風險偏高",
+        medium_large_drop_risk: "中途大跌風險中等",
+        low_large_drop_risk: "中途大跌風險偏低",
+    };
+
+    return labels[normalizedLabel] || String(label || "").replaceAll("_", " ");
+}
+
+function translateQualityLabel(label) {
+    const labels = {
+        high: "高",
+        medium: "中",
+        low_to_medium: "低到中",
+        low: "低",
+        none: "無",
+        unknown: "未知",
+    };
+
+    return labels[label] || label;
+}
+
+function translateHorizonLabel(horizon) {
+    const labels = {
+        "5d": "5 個交易日",
+        "10d": "10 個交易日",
+        "20d": "20 個交易日",
+    };
+
+    return labels[horizon] || horizon;
+}
+
 function buildOverallAssessmentText(data) {
     const decision = buildSingleStockDecision(data);
     const profile = data.research_profile || {};
@@ -1061,6 +1235,40 @@ function formatSignedPercent(value) {
 
     const sign = numberValue > 0 ? "+" : "";
     return sign + (numberValue * 100).toFixed(1) + "%";
+}
+
+function formatRangePercent(range) {
+    if (!range) {
+        return "-";
+    }
+
+    if (Array.isArray(range) && range.length >= 2) {
+        const low = formatSignedPercent(range[0]);
+        const high = formatSignedPercent(range[1]);
+        return low === "-" || high === "-" ? "-" : low + " ~ " + high;
+    }
+
+    const low = range.low ?? range.min ?? range.p25 ?? range.q25;
+    const high = range.high ?? range.max ?? range.p75 ?? range.q75;
+    const lowPercent = range.low_percent ?? range.min_percent ?? range.p25_percent ?? range.q25_percent;
+    const highPercent = range.high_percent ?? range.max_percent ?? range.p75_percent ?? range.q75_percent;
+    const lowText = formatSignedPercent(low);
+    const highText = formatSignedPercent(high);
+
+    if (lowText !== "-" && highText !== "-") {
+        return lowText + " ~ " + highText;
+    }
+
+    const lowPercentNumber = Number(lowPercent);
+    const highPercentNumber = Number(highPercent);
+
+    if (!Number.isFinite(lowPercentNumber) || !Number.isFinite(highPercentNumber)) {
+        return "-";
+    }
+
+    const lowPercentSign = lowPercentNumber > 0 ? "+" : "";
+    const highPercentSign = highPercentNumber > 0 ? "+" : "";
+    return lowPercentSign + lowPercentNumber.toFixed(1) + "% ~ " + highPercentSign + highPercentNumber.toFixed(1) + "%";
 }
 
 function escapeHTML(value) {
