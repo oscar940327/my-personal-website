@@ -19,12 +19,14 @@ const summaryGrid = document.getElementById("summary-grid");
 const reportCard = document.getElementById("report-card");
 const reportOutput = document.getElementById("report-output");
 const responseStatus = document.getElementById("response-status");
+const dataFreshnessStatus = document.getElementById("data-freshness-status");
 const pricePlanList = document.getElementById("price-plan-list");
 const newsImpactList = document.getElementById("news-impact-list");
 const jsonOutput = document.getElementById("json-output");
 
 apiStatus.textContent = API_BASE_URL.replace(/^https?:\/\//, "");
 addTraceLines();
+setDataFreshnessStatus();
 checkApiHealth();
 window.setInterval(checkApiHealth, 15000);
 
@@ -173,6 +175,7 @@ async function runAnalysis(endpoint, payload, mode) {
     analyzeButton.disabled = true;
     analyzeButton.textContent = "Analyzing...";
     setReportStatus("Running", "running");
+    setDataFreshnessStatus();
     reportCard.classList.add("is-empty");
     reportOutput.textContent = "Analyzing structured market data...";
     formNote.classList.remove("is-error");
@@ -197,6 +200,7 @@ async function runAnalysis(endpoint, payload, mode) {
         renderResult(result, mode, payload);
     } catch (error) {
         setReportStatus("Error", "error");
+        setDataFreshnessStatus();
         summaryGrid.innerHTML = renderSummaryItems([
             ["估值", "無法分析"],
             ["技術", "無法分析"],
@@ -229,6 +233,7 @@ function renderResult(result, mode, payload) {
     const resultMode = result.intent === "portfolio_analysis" ? "portfolio" : "single";
 
     setReportStatus(buildEvidenceStatusLabel(result, data), getEvidenceStatusLevel(result, data));
+    setDataFreshnessStatus(data.data_freshness);
     reportCard.classList.remove("is-empty");
     jsonOutput.textContent = JSON.stringify(buildStructuredDebugView(withRequestOptions(result, payload)), null, 2);
 
@@ -263,6 +268,27 @@ function setReportStatus(label, level = "neutral") {
         "is-neutral"
     );
     responseStatus.classList.add(`is-${level.replaceAll("_", "-")}`);
+}
+
+function setDataFreshnessStatus(dataFreshness = null) {
+    const level = normalizeFreshnessLevel(dataFreshness?.overall);
+    dataFreshnessStatus.textContent = `Data freshness: ${level}`;
+    dataFreshnessStatus.classList.remove(
+        "is-fresh",
+        "is-warning",
+        "is-stale",
+        "is-missing",
+        "is-unknown"
+    );
+    dataFreshnessStatus.classList.add(`is-${level}`);
+}
+
+function normalizeFreshnessLevel(level) {
+    const normalized = String(level || "unknown").toLowerCase();
+    if (["fresh", "warning", "stale", "missing"].includes(normalized)) {
+        return normalized;
+    }
+    return "unknown";
 }
 
 function buildEvidenceStatusLabel(result, data) {
@@ -382,6 +408,7 @@ function buildSingleStockDebugView(result, data) {
         backtest_evidence: summarizeBacktestEvidence(backtestEvidence),
         ml_research: data.ml_research || data.agent_outputs?.ml_research || {},
         evidence_quality: data.evidence_quality || data.research_profile?.evidence_quality || {},
+        data_freshness: data.data_freshness || {},
         analyst: result.analyst || {},
         error: result.error || null,
     };

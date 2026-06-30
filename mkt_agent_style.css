@@ -170,6 +170,31 @@ textarea {
     color: var(--muted);
 }
 
+.card-title-row span.is-fresh {
+    border-color: rgba(48, 126, 89, 0.28);
+    background: rgba(48, 126, 89, 0.12);
+    color: #2f7d58;
+}
+
+.card-title-row span.is-warning {
+    border-color: rgba(178, 127, 52, 0.3);
+    background: rgba(178, 127, 52, 0.14);
+    color: #946626;
+}
+
+.card-title-row span.is-stale {
+    border-color: rgba(176, 75, 63, 0.32);
+    background: rgba(176, 75, 63, 0.13);
+    color: #9f4238;
+}
+
+.card-title-row span.is-missing,
+.card-title-row span.is-unknown {
+    border-color: var(--line);
+    background: var(--soft);
+    color: var(--muted);
+}
+
 .api-pill {
     gap: 7px;
     margin-top: 7px;
@@ -271,6 +296,13 @@ textarea {
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 10px;
+}
+
+.status-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 7px;
 }
 
 .field-card h2,
