@@ -1,4 +1,4 @@
-const API_BASE_URL = window.MARKET_AGENT_API_BASE_URL || "http://127.0.0.1:8000";
+﻿const API_BASE_URL = window.MARKET_AGENT_API_BASE_URL || "http://127.0.0.1:8000";
 
 const form = document.getElementById("mkt-agent-form");
 const modeInputs = Array.from(document.querySelectorAll('input[name="mode"]'));
@@ -20,6 +20,7 @@ const reportCard = document.getElementById("report-card");
 const reportOutput = document.getElementById("report-output");
 const responseStatus = document.getElementById("response-status");
 const dataFreshnessStatus = document.getElementById("data-freshness-status");
+const mlReferenceStatus = document.getElementById("ml-reference-status");
 const pricePlanList = document.getElementById("price-plan-list");
 const newsImpactList = document.getElementById("news-impact-list");
 const jsonOutput = document.getElementById("json-output");
@@ -27,6 +28,7 @@ const jsonOutput = document.getElementById("json-output");
 apiStatus.textContent = API_BASE_URL.replace(/^https?:\/\//, "");
 addTraceLines();
 setDataFreshnessStatus();
+setMlReferenceStatus();
 checkApiHealth();
 window.setInterval(checkApiHealth, 15000);
 
@@ -176,6 +178,7 @@ async function runAnalysis(endpoint, payload, mode) {
     analyzeButton.textContent = "Analyzing...";
     setReportStatus("Running", "running");
     setDataFreshnessStatus();
+    setMlReferenceStatus();
     reportCard.classList.add("is-empty");
     reportOutput.textContent = "Analyzing structured market data...";
     formNote.classList.remove("is-error");
@@ -201,6 +204,7 @@ async function runAnalysis(endpoint, payload, mode) {
     } catch (error) {
         setReportStatus("Error", "error");
         setDataFreshnessStatus();
+        setMlReferenceStatus();
         summaryGrid.innerHTML = renderSummaryItems([
             ["估值", "無法分析"],
             ["技術", "無法分析"],
@@ -234,6 +238,7 @@ function renderResult(result, mode, payload) {
 
     setReportStatus(buildEvidenceStatusLabel(result, data), getEvidenceStatusLevel(result, data));
     setDataFreshnessStatus(data.data_freshness);
+    setMlReferenceStatus(data.ml_research || data.agent_outputs?.ml_research, data.ml_prediction);
     reportCard.classList.remove("is-empty");
     jsonOutput.textContent = JSON.stringify(buildStructuredDebugView(withRequestOptions(result, payload)), null, 2);
 
@@ -272,7 +277,7 @@ function setReportStatus(label, level = "neutral") {
 
 function setDataFreshnessStatus(dataFreshness = null) {
     const level = normalizeFreshnessLevel(dataFreshness?.overall);
-    dataFreshnessStatus.textContent = `Data freshness: ${level}`;
+    dataFreshnessStatus.textContent = `System Data: ${level}`;
     dataFreshnessStatus.classList.remove(
         "is-fresh",
         "is-warning",
@@ -289,6 +294,56 @@ function normalizeFreshnessLevel(level) {
         return normalized;
     }
     return "unknown";
+}
+
+function setMlReferenceStatus(mlResearch = null, mlPrediction = null) {
+    const status = buildMlReferenceStatus(mlResearch, mlPrediction);
+    mlReferenceStatus.textContent = `ML Reference: ${status.label}`;
+    mlReferenceStatus.classList.remove(
+        "is-fresh",
+        "is-warning",
+        "is-stale",
+        "is-missing",
+        "is-unknown"
+    );
+    mlReferenceStatus.classList.add(`is-${status.level}`);
+}
+
+function buildMlReferenceStatus(mlResearch = null, mlPrediction = null) {
+    const source = mlResearch?.source || {};
+    const sourceType = String(source.type || "unknown").toLowerCase();
+
+    if (sourceType === "saved_daily_prediction") {
+        const freshness = normalizeFreshnessLevel(
+            source.prediction_freshness || mlPrediction?.prediction_freshness
+        );
+        return {
+            label: `saved / ${freshness}`,
+            level: freshness === "fresh" ? "fresh" : freshness === "warning" ? "warning" : "unknown",
+        };
+    }
+
+    if (sourceType === "runtime_fallback") {
+        return { label: "fallback", level: "warning" };
+    }
+
+    if (sourceType === "unavailable") {
+        return { label: "unavailable", level: "unknown" };
+    }
+
+    if (sourceType === "skipped") {
+        return { label: "skipped", level: "unknown" };
+    }
+
+    if (mlResearch?.status === "unavailable") {
+        return { label: "unavailable", level: "unknown" };
+    }
+
+    if (mlResearch?.status === "skipped") {
+        return { label: "skipped", level: "unknown" };
+    }
+
+    return { label: "unknown", level: "unknown" };
 }
 
 function buildEvidenceStatusLabel(result, data) {
@@ -406,7 +461,8 @@ function buildSingleStockDebugView(result, data) {
             risks: fundamentals.summary?.risks || [],
         },
         backtest_evidence: summarizeBacktestEvidence(backtestEvidence),
-        ml_research: data.ml_research || data.agent_outputs?.ml_research || {},
+        ml_reference: summarizeMlReference(data.ml_research || data.agent_outputs?.ml_research || {}),
+        ml_prediction: summarizeMlPrediction(data.ml_prediction || {}),
         evidence_quality: data.evidence_quality || data.research_profile?.evidence_quality || {},
         data_freshness: data.data_freshness || {},
         analyst: result.analyst || {},
@@ -414,6 +470,96 @@ function buildSingleStockDebugView(result, data) {
     };
 }
 
+function summarizeMlReference(mlResearch = {}) {
+    const targets = mlResearch.targets || {};
+    const returnReference = mlResearch.return_reference || {};
+    const returnModel = mlResearch.return_model || {};
+
+    return {
+        status: mlResearch.status,
+        source: mlResearch.source || {},
+        model_version: mlResearch.model_version,
+        feature_version: mlResearch.feature_version,
+        label_version: mlResearch.label_version,
+        training_data_as_of: mlResearch.training_data_as_of,
+        targets: {
+            up_5d: summarizeMlTarget(targets.up_5d),
+            up_10d: summarizeMlTarget(targets.up_10d),
+            up_20d: summarizeMlTarget(targets.up_20d),
+            large_drop_20d: summarizeMlTarget(targets.large_drop_20d),
+        },
+        return_reference: {
+            method: returnReference.method,
+            sample_size: returnReference.sample_size,
+            evidence_quality: returnReference.evidence_quality,
+            expected_return_range_5d: returnReference.expected_return_range_5d,
+            expected_return_range_10d: returnReference.expected_return_range_10d,
+            expected_return_range_20d: returnReference.expected_return_range_20d,
+            max_drop_range_20d: returnReference.max_drop_range_20d,
+        },
+        return_model: summarizeReturnModel(returnModel),
+    };
+}
+
+function summarizeMlTarget(target = {}) {
+    return {
+        probability: target.probability,
+        probability_percent: target.probability_percent,
+        signal_label: target.signal_label,
+        signal_quality: target.signal_quality,
+    };
+}
+
+function summarizeReturnModel(returnModel = {}) {
+    const targets = returnModel.targets || {};
+    return {
+        status: returnModel.status,
+        model_version: returnModel.model_version,
+        targets: {
+            forward_return_5d: summarizeReturnModelTarget(targets.forward_return_5d),
+            forward_return_10d: summarizeReturnModelTarget(targets.forward_return_10d),
+            forward_return_20d: summarizeReturnModelTarget(targets.forward_return_20d),
+            max_drop_20d: summarizeReturnModelTarget(targets.max_drop_20d),
+        },
+    };
+}
+
+function summarizeReturnModelTarget(target = {}) {
+    return {
+        predicted_value: target.predicted_value,
+        predicted_percent: target.predicted_percent,
+        predicted_range: target.predicted_range,
+        model_quality: target.model_quality,
+    };
+}
+
+function summarizeMlPrediction(mlPrediction = {}) {
+    const payload = mlPrediction.prediction_payload || {};
+    return {
+        prediction_status: mlPrediction.prediction_status,
+        prediction_freshness: mlPrediction.prediction_freshness,
+        prediction_date: mlPrediction.prediction_date,
+        data_as_of: mlPrediction.data_as_of,
+        model_version: mlPrediction.model_version,
+        feature_version: mlPrediction.feature_version,
+        versioning: payload.versioning || {},
+        probabilities: {
+            up_5d: mlPrediction.up_probability_5d,
+            up_10d: mlPrediction.up_probability_10d,
+            up_20d: mlPrediction.up_probability_20d,
+            large_drop_20d: mlPrediction.large_drop_risk_20d,
+        },
+        quality: {
+            model_quality: mlPrediction.model_quality,
+            evidence_quality: mlPrediction.evidence_quality,
+            signal_clarity: mlPrediction.signal_clarity,
+            data_completeness: mlPrediction.data_completeness,
+            news_coverage: mlPrediction.news_coverage,
+            fundamental_coverage: mlPrediction.fundamental_coverage,
+        },
+        market_snapshot: payload.market_snapshot || mlPrediction.feature_snapshot?.market_snapshot || {},
+    };
+}
 function buildBacktestDebugView(result, data) {
     const evidenceQuality = data.evidence_quality || {};
 
@@ -1306,3 +1452,10 @@ function escapeHTML(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
+
+
+
+
+
+
