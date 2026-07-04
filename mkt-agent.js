@@ -1,7 +1,25 @@
 ﻿const LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
 const DEPLOYED_API_BASE_URL = "https://market-agent-td8u.onrender.com";
+const apiMode = new URLSearchParams(window.location.search).get("api");
 const isLocalMarketAgentPage = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
-const API_BASE_URL = window.MARKET_AGENT_API_BASE_URL || (isLocalMarketAgentPage ? LOCAL_API_BASE_URL : DEPLOYED_API_BASE_URL);
+
+const resolveApiBaseUrl = () => {
+    if (window.MARKET_AGENT_API_BASE_URL) {
+        return window.MARKET_AGENT_API_BASE_URL;
+    }
+
+    if (apiMode === "render" || apiMode === "deployed") {
+        return DEPLOYED_API_BASE_URL;
+    }
+
+    if (apiMode === "local") {
+        return LOCAL_API_BASE_URL;
+    }
+
+    return isLocalMarketAgentPage ? LOCAL_API_BASE_URL : DEPLOYED_API_BASE_URL;
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const form = document.getElementById("mkt-agent-form");
 const modeInputs = Array.from(document.querySelectorAll('input[name="mode"]'));
