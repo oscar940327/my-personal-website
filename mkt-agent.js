@@ -253,7 +253,7 @@ function renderResult(result, mode, payload) {
         reportOutput.textContent = result.report || data.message || "No report returned.";
     } else {
         renderSingleStock(data);
-        reportOutput.textContent = buildSingleStockReport(data);
+        reportOutput.textContent = result.report || buildSingleStockReport(data);
     }
 
     formNote.classList.remove("is-error");
@@ -463,10 +463,26 @@ function buildSingleStockDebugView(result, data) {
         backtest_evidence: summarizeBacktestEvidence(backtestEvidence),
         ml_reference: summarizeMlReference(data.ml_research || data.agent_outputs?.ml_research || {}),
         ml_prediction: summarizeMlPrediction(data.ml_prediction || {}),
+        exit_signal: summarizeExitSignal(data.exit_signal || data.agent_outputs?.exit_signal?.payload || data.agent_outputs?.exit_signal || {}),
         evidence_quality: data.evidence_quality || data.research_profile?.evidence_quality || {},
         data_freshness: data.data_freshness || {},
         analyst: result.analyst || {},
         error: result.error || null,
+    };
+}
+
+function summarizeExitSignal(exitSignal = {}) {
+    return {
+        status: exitSignal.status,
+        exit_signal: exitSignal.exit_signal,
+        weakening_signal_20d: exitSignal.weakening_signal_20d,
+        email_alert_eligible: exitSignal.email_alert_eligible,
+        reason: exitSignal.reason,
+        reasons: exitSignal.reasons || [],
+        action_note: exitSignal.action_note,
+        price_vs_ma20: exitSignal.price_vs_ma20,
+        macd_histogram: exitSignal.macd_histogram,
+        ml_reference_used: exitSignal.ml_reference_used,
     };
 }
 
