@@ -28,7 +28,7 @@ const pricePlanList = document.getElementById("price-plan-list");
 const newsImpactList = document.getElementById("news-impact-list");
 const jsonOutput = document.getElementById("json-output");
 
-apiStatus.textContent = API_BASE_URL.replace(/^https?:\/\//, "");
+apiStatus.textContent = "Backend";
 addTraceLines();
 setDataFreshnessStatus();
 setMlReferenceStatus();
