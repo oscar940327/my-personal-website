@@ -477,6 +477,11 @@ function buildSingleStockDebugView(result, data) {
         },
         fundamentals: {
             status: fundamentals.status,
+            provider: fundamentals.provider,
+            source_provider: fundamentals.source_provider,
+            as_of: fundamentals.as_of,
+            fetched_at: fundamentals.fetched_at,
+            metrics: fundamentals.metrics || {},
             stance: fundamentals.summary?.stance,
             positives: fundamentals.summary?.positives || [],
             risks: fundamentals.summary?.risks || [],
@@ -1489,3 +1494,4 @@ function escapeHTML(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
