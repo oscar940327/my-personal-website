@@ -258,8 +258,8 @@ function renderResult(result, mode, payload) {
     const resultMode = result.intent === "portfolio_analysis" ? "portfolio" : "single";
 
     setReportStatus(buildEvidenceStatusLabel(result, data), getEvidenceStatusLevel(result, data));
-    setDataFreshnessStatus(data.data_freshness);
-    setMlReferenceStatus(data.ml_research || data.agent_outputs?.ml_research, data.ml_prediction);
+    setDataFreshnessStatus(resolveDataFreshnessForStatus(result, data));
+    setMlReferenceStatus(resolveMlResearchForStatus(result, data), data.ml_prediction);
     reportCard.classList.remove("is-empty");
     jsonOutput.textContent = JSON.stringify(buildStructuredDebugView(withRequestOptions(result, payload)), null, 2);
 
@@ -296,6 +296,64 @@ function setReportStatus(label, level = "neutral") {
     responseStatus.classList.add(`is-${level.replaceAll("_", "-")}`);
 }
 
+function resolveDataFreshnessForStatus(result, data = {}) {
+    if (data.data_freshness) {
+        return data.data_freshness;
+    }
+
+    if (result.intent === "industry_trend") {
+        return summarizeThemeDataFreshness(data);
+    }
+
+    return null;
+}
+
+function summarizeThemeDataFreshness(data = {}) {
+    const statuses = (data.results || [])
+        .map(result => result.analysis?.data_freshness?.overall)
+        .filter(Boolean);
+
+    if (!statuses.length) {
+        return null;
+    }
+
+    return {
+        overall: pickWorstFreshness(statuses),
+        source: "theme_constituents",
+        constituent_count: statuses.length,
+        status_counts: countValues(statuses),
+    };
+}
+
+function pickWorstFreshness(statuses = []) {
+    const priority = ["missing", "stale", "warning", "fresh"];
+    const normalized = statuses.map(status => normalizeFreshnessLevel(status));
+    return priority.find(status => normalized.includes(status)) || "unknown";
+}
+
+function countValues(values = []) {
+    return values.reduce((counts, value) => {
+        const key = String(value || "unknown");
+        counts[key] = (counts[key] || 0) + 1;
+        return counts;
+    }, {});
+}
+
+function resolveMlResearchForStatus(result, data = {}) {
+    if (data.ml_research || data.agent_outputs?.ml_research) {
+        return data.ml_research || data.agent_outputs?.ml_research;
+    }
+
+    if (result.intent === "industry_trend") {
+        return {
+            status: "skipped",
+            source: { type: "skipped" },
+            reason: "Theme workflow does not use aggregate ML Reference yet.",
+        };
+    }
+
+    return null;
+}
 function setDataFreshnessStatus(dataFreshness = null) {
     const level = normalizeFreshnessLevel(dataFreshness?.overall);
     dataFreshnessStatus.textContent = `System Data: ${level}`;
@@ -631,6 +689,8 @@ function buildThemeDebugView(result, data) {
         scan_scope: data.scan_scope || {},
         sector_summary: data.sector_summary || {},
         evidence_quality: data.evidence_quality || {},
+        data_freshness: summarizeThemeDataFreshness(data) || {},
+        ml_reference: summarizeMlReference(resolveMlResearchForStatus(result, data)),
         analyst: result.analyst || {},
         error: result.error || null,
     };
@@ -1494,4 +1554,5 @@ function escapeHTML(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
 
