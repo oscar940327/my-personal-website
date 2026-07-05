@@ -697,6 +697,7 @@ function buildThemeDebugView(result, data) {
         scan_scope: data.scan_scope || {},
         sector_summary: data.sector_summary || {},
         evidence_quality: data.evidence_quality || {},
+        failed_results: data.failed_results || [],
         data_freshness: summarizeThemeDataFreshness(data) || {},
         ml_reference: summarizeMlReference(resolveMlResearchForStatus(result, data)),
         theme_ml_reference: data.theme_ml_reference || {},
@@ -1563,6 +1564,7 @@ function escapeHTML(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
 
 
 
