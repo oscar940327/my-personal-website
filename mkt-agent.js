@@ -340,8 +340,8 @@ function countValues(values = []) {
 }
 
 function resolveMlResearchForStatus(result, data = {}) {
-    if (data.ml_research || data.agent_outputs?.ml_research) {
-        return data.ml_research || data.agent_outputs?.ml_research;
+    if (data.theme_ml_reference || data.ml_research || data.agent_outputs?.ml_research) {
+        return data.theme_ml_reference || data.ml_research || data.agent_outputs?.ml_research;
     }
 
     if (result.intent === "industry_trend") {
@@ -398,6 +398,14 @@ function buildMlReferenceStatus(mlResearch = null, mlPrediction = null) {
         );
         return {
             label: `saved / ${freshness}`,
+            level: freshness === "fresh" ? "fresh" : freshness === "warning" ? "warning" : "unknown",
+        };
+    }
+
+    if (sourceType === "theme_aggregate") {
+        const freshness = normalizeFreshnessLevel(source.prediction_freshness);
+        return {
+            label: `aggregated / ${freshness}`,
             level: freshness === "fresh" ? "fresh" : freshness === "warning" ? "warning" : "unknown",
         };
     }
@@ -691,6 +699,7 @@ function buildThemeDebugView(result, data) {
         evidence_quality: data.evidence_quality || {},
         data_freshness: summarizeThemeDataFreshness(data) || {},
         ml_reference: summarizeMlReference(resolveMlResearchForStatus(result, data)),
+        theme_ml_reference: data.theme_ml_reference || {},
         analyst: result.analyst || {},
         error: result.error || null,
     };
@@ -1554,5 +1563,6 @@ function escapeHTML(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
 
 
