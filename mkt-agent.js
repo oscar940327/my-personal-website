@@ -344,6 +344,10 @@ function resolveMlResearchForStatus(result, data = {}) {
         return data.theme_ml_reference || data.ml_research || data.agent_outputs?.ml_research;
     }
 
+    if (data.ml_reference) {
+        return data.ml_reference;
+    }
+
     if (result.intent === "industry_trend") {
         return {
             status: "skipped",
@@ -416,6 +420,10 @@ function buildMlReferenceStatus(mlResearch = null, mlPrediction = null) {
 
     if (sourceType === "unavailable") {
         return { label: "unavailable", level: "unknown" };
+    }
+
+    if (sourceType === "not_applicable") {
+        return { label: "not used", level: "unknown" };
     }
 
     if (sourceType === "skipped") {
