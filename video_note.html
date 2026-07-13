@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="video_note_style.css?v=20260713-1">
+    <link rel="stylesheet" href="header_style.css?v=20260713-1">
+    <link rel="icon" href="images/icon3.png" type="image/x-icon">
+    <title>VideoNote</title>
+</head>
+<body>
+    <div id="header-placeholder"></div>
+    <button class="theme-toggle" type="button" aria-label="Toggle color theme"><span></span></button>
+
+    <main class="video-note-page">
+        <section class="video-note-shell">
+            <header class="video-note-hero">
+                <p class="page-kicker">Video to structured knowledge</p>
+                <div class="hero-title-row">
+                    <h1>VideoNote</h1>
+                    <span class="connection-pill">Frontend preview</span>
+                </div>
+                <p class="hero-copy">Turn YouTube and Bilibili technical videos into editable Markdown notes.</p>
+            </header>
+
+            <section class="input-card" aria-labelledby="video-input-title">
+                <div class="section-heading">
+                    <div><span class="section-number">01</span><h2 id="video-input-title">Add a video</h2></div>
+                    <span class="support-label">YouTube · Bilibili</span>
+                </div>
+                <form id="video-note-form">
+                    <label class="url-field" for="video-url">
+                        <span>Video URL</span>
+                        <div class="url-input-row">
+                            <input id="video-url" type="url" value="https://www.bilibili.com/video/BV1X6Vo6EEMs/" placeholder="Paste a YouTube or Bilibili URL" required>
+                            <button class="generate-button" type="submit"><span>Generate note</span><span aria-hidden="true">↗</span></button>
+                        </div>
+                    </label>
+                    <details class="advanced-settings">
+                        <summary>Note settings</summary>
+                        <div class="settings-grid">
+                            <label><span>Output language</span><select><option>繁體中文</option><option>English</option></select></label>
+                            <label><span>Whisper model</span><select><option>Small</option><option>Medium</option><option>Large-v3</option></select></label>
+                            <label><span>Note style</span><select><option>Concise</option><option selected>Standard</option><option>Detailed</option></select></label>
+                        </div>
+                    </details>
+                </form>
+            </section>
+
+            <section class="progress-card is-hidden" id="progress-card" aria-live="polite">
+                <div class="progress-topline">
+                    <div><span class="section-number">02</span><h2>Building your note</h2></div>
+                    <strong id="progress-percent">0%</strong>
+                </div>
+                <div class="progress-track"><span id="progress-bar"></span></div>
+                <ol class="progress-steps" id="progress-steps">
+                    <li>Reading video information</li><li>Finding available subtitles</li><li>Preparing transcript</li><li>Structuring the note</li><li>Rendering Markdown</li>
+                </ol>
+                <p class="demo-notice">This preview simulates generation. The transcription backend is not connected yet.</p>
+            </section>
+
+            <section class="workspace-card is-hidden" id="workspace-card" aria-labelledby="workspace-title">
+                <div class="workspace-heading">
+                    <div><span class="section-number">03</span><div><h2 id="workspace-title">Review your note</h2><p>Plan-and-Execute Agent · Bilibili · Demo note</p></div></div>
+                    <div class="workspace-view-toggle" aria-label="Workspace view">
+                        <button type="button" data-view="editor">Editor</button><button type="button" data-view="preview">Preview</button><button class="is-active" type="button" data-view="split">Split</button>
+                    </div>
+                </div>
+                <div class="workspace-grid" data-view="split" id="workspace-grid">
+                    <section class="workspace-pane editor-pane">
+                        <header><div><span class="status-dot"></span><h3>Markdown Editor</h3></div><span id="editor-status">Ready</span></header>
+                        <div class="editor-scroll"><textarea id="markdown-editor" spellcheck="false" aria-label="Markdown editor"></textarea></div>
+                    </section>
+                    <section class="workspace-pane preview-pane">
+                        <header><div><span class="status-dot preview-dot"></span><h3>Preview</h3></div><span>Live</span></header>
+                        <div class="preview-scroll markdown-body" id="markdown-preview"></div>
+                    </section>
+                </div>
+                <div class="validation-message is-hidden" id="validation-message" role="status"></div>
+                <footer class="workspace-actions">
+                    <div class="draft-status"><span class="status-dot"></span><span id="word-count">0 words</span></div>
+                    <div class="action-buttons">
+                        <button class="secondary-button" id="validate-note" type="button">檢查筆記</button>
+                        <button class="secondary-button" id="download-note" type="button">下載 Markdown</button>
+                        <button class="primary-button" id="save-note" type="button">儲存至 Obsidian</button>
+                    </div>
+                </footer>
+            </section>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+    <script src="video-note.js?v=20260713-1" defer></script>
+    <script src="header-placeholder.js?v=20260713-1" defer></script>
+</body>
+</html>

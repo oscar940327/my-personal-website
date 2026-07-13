@@ -258,11 +258,11 @@ body.dark-mode .theme-toggle span {
         gap: 0;
         --line-gap: 5px;
         --nav-line-width: 100%;
-        --indicator-width: calc(100% / 4);
+        --indicator-width: calc(100% / 5);
     }
 
     .sidebar-menu a {
-        width: 25%;
+        width: 20%;
         font-size: 17px;
         text-align: center;
     }

@@ -13,6 +13,7 @@ const headerHTML = `
         <a href="project_page.html">PROJECT</a>
         <a href="timeline_page.html">JOURNEY</a>
         <a href="mkt_agent.html">MktAgent</a>
+        <a href="video_note.html">VideoNote</a>
         <span class="nav-indicator" aria-hidden="true"></span>
     </nav>
 
