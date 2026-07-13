@@ -405,3 +405,7 @@ body.dark-mode .theme-toggle span {
         transform: translateX(17px);
     }
 }
+/* Hide color theme switch until the site needs light/dark controls again. */
+.theme-toggle {
+    display: none !important;
+}
