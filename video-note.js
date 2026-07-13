@@ -1,8 +1,13 @@
+const LOCAL_API_BASE_URL = "http://127.0.0.1:8010";
+const API_BASE_URL = window.VIDEONOTE_API_BASE_URL || LOCAL_API_BASE_URL;
+
 const form = document.getElementById("video-note-form");
+const apiStatus = document.getElementById("api-status");
 const generateButton = document.querySelector(".generate-button");
 const progressCard = document.getElementById("progress-card");
 const progressBar = document.getElementById("progress-bar");
 const progressPercent = document.getElementById("progress-percent");
+const progressDetail = document.getElementById("progress-detail");
 const progressSteps = [...document.querySelectorAll("#progress-steps li")];
 const workspaceCard = document.getElementById("workspace-card");
 const workspaceGrid = document.getElementById("workspace-grid");
@@ -12,76 +17,26 @@ const preview = document.getElementById("markdown-preview");
 const editorStatus = document.getElementById("editor-status");
 const wordCount = document.getElementById("word-count");
 const validationMessage = document.getElementById("validation-message");
+let currentJobId = null;
 
-const sampleMarkdown = `---
-title: Plan-and-Execute Agent
-source: https://www.bilibili.com/video/BV1X6Vo6EEMs/
-platform: bilibili
-source_language: zh
-note_language: zh-TW
-tags:
-  - ai-agent
-  - planning
-  - agent-architecture
----
-
-# Plan-and-Execute Agent
-
-## 一句話介紹
-
-Plan-and-Execute 是一種先建立完整計畫，再逐步執行任務的 [[AI Agent]] 架構。
-
-> [!note] 影片內容
-> 這份示範筆記用來呈現 VideoNote 的 Markdown 編輯與預覽介面，尚未連接實際轉錄後端。
-
-## 為什麼需要
-
-單純依靠模型即時決定下一步，容易在複雜任務中遺漏目標。Plan-and-Execute 將「規劃」與「執行」拆開，讓任務狀態更容易追蹤。
-
-**來源時間：** 03:20–05:45
-
-## 核心概念
-
-- **Planner**：理解目標並產生任務清單。
-- **Executor**：依照任務清單呼叫工具。
-- **Re-planning**：根據執行結果更新剩餘計畫。
-
-## 運作流程
-
-1. 使用者提出目標。
-2. Planner 將目標拆成數個步驟。
-3. Executor 依序執行每個步驟。
-4. 系統確認結果，必要時重新規劃。
-
-\`\`\`text
-User Goal
-   ↓
-Planner → Task Plan
-   ↓
-Executor → Tools → Result
-\`\`\`
-
-## 優缺點
-
-| 優點 | 缺點 |
-| --- | --- |
-| 任務結構清楚 | 初始計畫可能不完整 |
-| 容易追蹤執行狀態 | 多一次規劃成本 |
-| 適合長流程任務 | 需要處理重新規劃 |
-
-## 我的理解
-
-- 我認為這個技術最核心的概念是：
-- 我可以將它應用在哪個專案：
-- 我仍然不理解的地方：
-`;
-
+const STAGE_ORDER = ["video_info", "subtitles", "transcription", "planning", "generation"];
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const escapeHTML = value => value.replace(/[&<>"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[character]);
 
 function splitFrontmatter(markdown) {
     const match = markdown.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
-    return match ? { frontmatter: match[1].trim(), body: markdown.slice(match[0].length) } : { frontmatter: "", body: markdown };
+    return match ? { frontmatter:match[1].trim(), body:markdown.slice(match[0].length) } : { frontmatter:"", body:markdown };
+}
+
+function normalizeVideoUrl(value) {
+    try {
+        const url = new URL(value.trim());
+        if (["bilibili.com", "www.bilibili.com", "m.bilibili.com"].includes(url.hostname)) {
+            const match = url.pathname.match(/\/video\/(BV[0-9A-Za-z]+|av\d+)/i);
+            if (match) return `https://www.bilibili.com/video/${match[1]}/`;
+        }
+    } catch { /* The backend will provide the URL validation message. */ }
+    return value.trim();
 }
 
 function fallbackRender(markdown) {
@@ -95,7 +50,7 @@ function renderMarkdown() {
     const rendered = renderer ? renderer.render(normalized) : fallbackRender(normalized);
     const safe = window.DOMPurify ? window.DOMPurify.sanitize(rendered) : rendered;
     preview.innerHTML = (frontmatter ? `<div class="frontmatter-card">${escapeHTML(frontmatter)}</div>` : "") + safe;
-    const plainText = editor.value.replace(/^---[\s\S]*?---/m, "").replace(/[#>*_`|\[\]()-]/g, " ").trim();
+    const plainText = editor.value.replace(/^---[\s\S]*?---/m, "").replace(/[#>*_`|\[\]()-]/g," ").trim();
     wordCount.textContent = `${plainText ? plainText.split(/\s+/).length : 0} words`;
 }
 
@@ -107,52 +62,151 @@ editor.addEventListener("input", () => {
     renderTimer = setTimeout(() => { renderMarkdown(); editorStatus.textContent = "Preview updated"; }, 220);
 });
 
-async function simulateGeneration() {
+function showMessage(message, type = "warning") {
+    validationMessage.className = `validation-message is-${type}`;
+    validationMessage.textContent = message;
+}
+
+async function apiRequest(path, options = {}) {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers: { "Content-Type":"application/json", ...(options.headers || {}) },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail || body);
+        throw new Error(detail || `Request failed (${response.status})`);
+    }
+    return body;
+}
+
+async function checkApi() {
+    try {
+        const health = await apiRequest("/api/health");
+        apiStatus.textContent = health.llm_configured ? `API ready · ${health.model}` : "API ready · Add OPENROUTER_API_KEY";
+        apiStatus.className = `connection-pill ${health.llm_configured ? "is-online" : "is-offline"}`;
+    } catch {
+        apiStatus.textContent = "API offline";
+        apiStatus.className = "connection-pill is-offline";
+    }
+}
+
+function updateProgress(job) {
+    progressBar.style.width = `${job.progress}%`;
+    progressPercent.textContent = `${job.progress}%`;
+    progressDetail.textContent = job.error || job.message;
+    const normalizedStage = job.stage === "audio_download" ? "transcription" :
+        ["processing","context"].includes(job.stage) ? "transcription" :
+        job.stage === "validation" || job.stage === "complete" ? "generation" : job.stage;
+    const currentIndex = STAGE_ORDER.indexOf(normalizedStage);
+    progressSteps.forEach((step, index) => {
+        step.classList.toggle("is-complete", job.status === "complete" || index < currentIndex);
+        step.classList.toggle("is-active", job.status === "running" && index === currentIndex);
+    });
+}
+
+async function pollJob(jobId) {
+    while (true) {
+        const job = await apiRequest(`/api/jobs/${jobId}`);
+        updateProgress(job);
+        if (job.status === "complete") return apiRequest(`/api/jobs/${jobId}/result`);
+        if (job.status === "failed") throw new Error(job.error || "VideoNote generation failed");
+        await wait(1000);
+    }
+}
+
+async function generateNote() {
     progressCard.classList.remove("is-hidden");
     workspaceCard.classList.add("is-hidden");
     validationMessage.classList.add("is-hidden");
     generateButton.disabled = true;
     generateButton.firstElementChild.textContent = "Building…";
     progressSteps.forEach(step => step.className = "");
-
-    for (let index = 0; index < progressSteps.length; index += 1) {
-        progressSteps.forEach((step, stepIndex) => {
-            step.classList.toggle("is-complete", stepIndex < index);
-            step.classList.toggle("is-active", stepIndex === index);
+    progressBar.style.width = "0%";
+    progressPercent.textContent = "0%";
+    try {
+        const job = await apiRequest("/api/jobs", {
+            method:"POST",
+            body:JSON.stringify({
+                url:normalizeVideoUrl(document.getElementById("video-url").value),
+                output_language:document.getElementById("output-language").value,
+                whisper_model:document.getElementById("whisper-model").value,
+                note_style:"standard",
+                grounding_mode:"assisted",
+                force_cpu:document.getElementById("force-cpu").checked,
+                cookies_from_browser:document.getElementById("cookies-browser").value || null,
+            }),
         });
-        const progress = Math.round(((index + 1) / progressSteps.length) * 100);
-        progressBar.style.width = `${progress}%`;
-        progressPercent.textContent = `${progress}%`;
-        await wait(520);
+        currentJobId = job.job_id;
+        const result = await pollJob(currentJobId);
+        editor.value = result.markdown;
+        renderMarkdown();
+        document.querySelector(".workspace-heading p").textContent = `${result.video.title} · ${result.video.platform} · ${result.transcript.source}`;
+        workspaceCard.classList.remove("is-hidden");
+        generateButton.firstElementChild.textContent = "Generate again";
+        workspaceCard.scrollIntoView({ behavior:"smooth", block:"start" });
+        const unsupported = result.validation.grounding?.unsupported_claims?.length || 0;
+        if (unsupported) showMessage(`筆記已完成，但有 ${unsupported} 個說法需要人工確認。`, "warning");
+    } catch (error) {
+        progressDetail.textContent = `Failed: ${error.message}`;
+        progressPercent.textContent = "Error";
+        showMessage(`生成失敗：${error.message}`, "warning");
+        workspaceCard.classList.remove("is-hidden");
+    } finally {
+        generateButton.disabled = false;
+        if (generateButton.firstElementChild.textContent === "Building…") generateButton.firstElementChild.textContent = "Generate note";
     }
-    progressSteps.forEach(step => { step.className = "is-complete"; });
-    editor.value = sampleMarkdown;
-    renderMarkdown();
-    workspaceCard.classList.remove("is-hidden");
-    generateButton.disabled = false;
-    generateButton.firstElementChild.textContent = "Generate again";
-    workspaceCard.scrollIntoView({ behavior:"smooth", block:"start" });
 }
 
-form.addEventListener("submit", event => { event.preventDefault(); simulateGeneration(); });
+form.addEventListener("submit", event => { event.preventDefault(); generateNote(); });
 viewButtons.forEach(button => button.addEventListener("click", () => {
     workspaceGrid.dataset.view = button.dataset.view;
     viewButtons.forEach(item => item.classList.toggle("is-active", item === button));
 }));
 
-document.getElementById("validate-note").addEventListener("click", () => {
-    const markdown = editor.value;
-    const problems = [];
-    const h1Count = (markdown.match(/^#\s+.+$/gm) || []).length;
-    const fences = (markdown.match(/^```/gm) || []).length;
-    const headings = (markdown.match(/^#{1,6}\s+(.+)$/gm) || []).map(item => item.replace(/^#{1,6}\s+/,""));
-    const duplicates = headings.filter((item,index) => headings.indexOf(item) !== index);
-    if (h1Count !== 1) problems.push(`需要恰好一個 H1，目前有 ${h1Count} 個`);
-    if (fences % 2) problems.push("程式碼區塊沒有成對關閉");
-    if (duplicates.length) problems.push(`發現重複標題：${[...new Set(duplicates)].join("、")}`);
-    if (!/^---\s*\n[\s\S]*?\n---/m.test(markdown)) problems.push("缺少 YAML Frontmatter");
-    validationMessage.className = `validation-message ${problems.length ? "is-warning" : "is-success"}`;
-    validationMessage.textContent = problems.length ? `需要確認：${problems.join("；")}。` : "格式檢查通過。標題、Frontmatter 與程式碼區塊皆正常。";
+document.getElementById("validate-note").addEventListener("click", async () => {
+    try {
+        showMessage("正在檢查 Markdown 與逐字稿忠實度…", "success");
+        const result = await apiRequest("/api/validate", {
+            method:"POST",
+            body:JSON.stringify({ markdown:editor.value, job_id:currentJobId, include_grounding:Boolean(currentJobId) }),
+        });
+        const issues = [...result.errors, ...result.warnings];
+        const unsupported = result.grounding?.unsupported_claims?.length || 0;
+        const message = issues.length || unsupported
+            ? `需要確認：${[...issues, unsupported ? `${unsupported} 個說法缺少逐字稿支持` : ""].filter(Boolean).join("；")}`
+            : "檢查通過：Markdown 格式正常，沒有發現缺乏逐字稿支持的說法。";
+        showMessage(message, issues.length || unsupported ? "warning" : "success");
+    } catch (error) { showMessage(`檢查失敗：${error.message}`, "warning"); }
+});
+
+function currentSection() {
+    const beforeCursor = editor.value.slice(0, editor.selectionStart);
+    const matches = [...beforeCursor.matchAll(/^##\s+(.+)$/gm)];
+    if (!matches.length) return null;
+    const match = matches[matches.length - 1];
+    const start = match.index;
+    const after = editor.value.slice(start + match[0].length);
+    const next = after.search(/^##\s+/m);
+    return { heading:match[1].trim(), start, end:next === -1 ? editor.value.length : start + match[0].length + next };
+}
+
+document.getElementById("regenerate-section").addEventListener("click", async () => {
+    if (!currentJobId) return showMessage("請先完成一個 VideoNote 任務。", "warning");
+    const section = currentSection();
+    if (!section) return showMessage("請先把游標放在要重新生成的二級章節內。", "warning");
+    const instruction = window.prompt(`如何修改「${section.heading}」？`, "改善清晰度並維持逐字稿忠實度。") || "";
+    if (!instruction.trim()) return;
+    try {
+        showMessage(`正在重新生成「${section.heading}」…`, "success");
+        const result = await apiRequest("/api/regenerate-section", {
+            method:"POST",
+            body:JSON.stringify({ job_id:currentJobId, markdown:editor.value, section_heading:section.heading, instruction }),
+        });
+        editor.value = editor.value.slice(0,section.start) + result.section_markdown + "\n\n" + editor.value.slice(section.end).replace(/^\s+/,"");
+        renderMarkdown();
+        showMessage(`「${section.heading}」已重新生成，請檢查內容後再下載。`, "success");
+    } catch (error) { showMessage(`重新生成失敗：${error.message}`, "warning"); }
 });
 
 function noteFilename() {
@@ -166,26 +220,5 @@ document.getElementById("download-note").addEventListener("click", () => {
     document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
 });
 
-document.getElementById("save-note").addEventListener("click", async () => {
-    validationMessage.className = "validation-message";
-    if (!("showDirectoryPicker" in window)) {
-        validationMessage.classList.add("is-warning");
-        validationMessage.textContent = "目前瀏覽器不支援資料夾寫入，請先使用「下載 Markdown」。Chrome 或 Edge 可支援此功能。";
-        return;
-    }
-    try {
-        const directory = await window.showDirectoryPicker({ mode:"readwrite" });
-        const file = await directory.getFileHandle(noteFilename(), { create:true });
-        const writable = await file.createWritable();
-        await writable.write(editor.value); await writable.close();
-        validationMessage.classList.add("is-success");
-        validationMessage.textContent = `已儲存 ${noteFilename()} 至你選擇的資料夾。`;
-    } catch (error) {
-        if (error.name !== "AbortError") {
-            validationMessage.classList.add("is-warning");
-            validationMessage.textContent = `無法儲存：${error.message}`;
-        }
-    }
-});
-
 renderMarkdown();
+checkApi();

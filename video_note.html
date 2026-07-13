@@ -21,7 +21,7 @@
                 <p class="page-kicker">Video to structured knowledge</p>
                 <div class="hero-title-row">
                     <h1>VideoNote</h1>
-                    <span class="connection-pill">Frontend preview</span>
+                    <span class="connection-pill" id="api-status">Checking API…</span>
                 </div>
                 <p class="hero-copy">Turn YouTube and Bilibili technical videos into editable Markdown notes.</p>
             </header>
@@ -35,17 +35,18 @@
                     <label class="url-field" for="video-url">
                         <span>Video URL</span>
                         <div class="url-input-row">
-                            <input id="video-url" type="url" value="https://www.bilibili.com/video/BV1X6Vo6EEMs/" placeholder="Paste a YouTube or Bilibili URL" required>
+                            <input id="video-url" type="url" value="" placeholder="Paste a YouTube or Bilibili URL" required>
                             <button class="generate-button" type="submit"><span>Generate note</span><span aria-hidden="true">↗</span></button>
                         </div>
                     </label>
                     <details class="advanced-settings">
                         <summary>Note settings</summary>
                         <div class="settings-grid">
-                            <label><span>Output language</span><select><option>繁體中文</option><option>English</option></select></label>
-                            <label><span>Whisper model</span><select><option>Small</option><option>Medium</option><option>Large-v3</option></select></label>
-                            <label><span>Note style</span><select><option>Concise</option><option selected>Standard</option><option>Detailed</option></select></label>
+                            <label><span>Output language</span><select id="output-language"><option value="zh-TW">繁體中文</option><option value="en">English</option></select></label>
+                            <label><span>Whisper model</span><select id="whisper-model"><option value="small">Small</option><option value="medium">Medium</option><option value="large-v3" selected>Large-v3</option></select></label>
+                            <label><span>Bilibili login</span><select id="cookies-browser"><option value="">No browser cookies</option><option value="chrome">Use Chrome login</option><option value="edge">Use Edge login</option></select></label>
                         </div>
+                        <label class="cpu-option"><input id="force-cpu" type="checkbox"><span>Force CPU（CUDA 環境不完整時使用）</span></label>
                     </details>
                 </form>
             </section>
@@ -59,7 +60,7 @@
                 <ol class="progress-steps" id="progress-steps">
                     <li>Reading video information</li><li>Finding available subtitles</li><li>Preparing transcript</li><li>Structuring the note</li><li>Rendering Markdown</li>
                 </ol>
-                <p class="demo-notice">This preview simulates generation. The transcription backend is not connected yet.</p>
+                <p class="demo-notice" id="progress-detail">Waiting for the backend.</p>
             </section>
 
             <section class="workspace-card is-hidden" id="workspace-card" aria-labelledby="workspace-title">
@@ -84,8 +85,8 @@
                     <div class="draft-status"><span class="status-dot"></span><span id="word-count">0 words</span></div>
                     <div class="action-buttons">
                         <button class="secondary-button" id="validate-note" type="button">檢查筆記</button>
+                        <button class="secondary-button" id="regenerate-section" type="button">重新生成目前章節</button>
                         <button class="secondary-button" id="download-note" type="button">下載 Markdown</button>
-                        <button class="primary-button" id="save-note" type="button">儲存至 Obsidian</button>
                     </div>
                 </footer>
             </section>
