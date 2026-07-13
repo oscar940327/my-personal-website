@@ -178,27 +178,6 @@ viewButtons.forEach(button => button.addEventListener("click", () => {
     viewButtons.forEach(item => item.classList.toggle("is-active", item === button));
 }));
 
-document.getElementById("validate-note").addEventListener("click", async () => {
-    try {
-        showMessage("正在檢查 Markdown 與逐字稿忠實度…", "success");
-        const result = await apiRequest("/api/validate", {
-            method:"POST",
-            body:JSON.stringify({ markdown:editor.value, job_id:currentJobId, include_grounding:Boolean(currentJobId) }),
-        });
-        if (result.annotated_markdown) {
-            editor.value = result.annotated_markdown;
-            renderMarkdown();
-            editorStatus.textContent = "Review markers updated";
-        }
-        const issues = [...result.errors, ...result.warnings];
-        const unsupported = result.grounding?.unsupported_claims?.length || 0;
-        const message = issues.length || unsupported
-            ? `需要確認：${[...issues, unsupported ? `${unsupported} 個說法缺少逐字稿支持` : ""].filter(Boolean).join("；")}`
-            : "檢查通過：Markdown 格式正常，沒有發現缺乏逐字稿支持的說法。";
-        showMessage(message, issues.length || unsupported ? "warning" : "success");
-    } catch (error) { showMessage(`檢查失敗：${error.message}`, "warning"); }
-});
-
 function noteFilename() {
     const title = editor.value.match(/^#\s+(.+)$/m)?.[1] || "VideoNote";
     return `${title.replace(/[<>:"/\\|?*\x00-\x1f]/g,"-").trim()}.md`;
