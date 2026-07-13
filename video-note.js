@@ -18,6 +18,8 @@ const editorStatus = document.getElementById("editor-status");
 const wordCount = document.getElementById("word-count");
 const validationMessage = document.getElementById("validation-message");
 let currentJobId = null;
+let currentVaultRelativePath = null;
+let recommendedVaultFolder = null;
 
 const STAGE_ORDER = ["video_info", "subtitles", "transcription", "planning", "generation"];
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -145,6 +147,18 @@ async function generateNote() {
         workspaceCard.classList.remove("is-hidden");
         generateButton.firstElementChild.textContent = "Generate again";
         workspaceCard.scrollIntoView({ behavior:"smooth", block:"start" });
+        currentVaultRelativePath = null;
+        recommendedVaultFolder = null;
+        try {
+            const recommendation = await apiRequest("/api/vault/classify", {
+                method:"POST",
+                body:JSON.stringify({ markdown:editor.value }),
+            });
+            recommendedVaultFolder = recommendation.folder;
+            showMessage(`建議儲存位置：${recommendation.folder}/${recommendation.filename}`, "success");
+        } catch (error) {
+            showMessage(`筆記已完成；Vault 分類暫時無法使用：${error.message}`, "warning");
+        }
         const unsupported = result.validation.grounding?.unsupported_claims?.length || 0;
         if (unsupported) showMessage(`筆記已完成，但有 ${unsupported} 個說法需要人工確認。`, "warning");
     } catch (error) {
@@ -171,6 +185,11 @@ document.getElementById("validate-note").addEventListener("click", async () => {
             method:"POST",
             body:JSON.stringify({ markdown:editor.value, job_id:currentJobId, include_grounding:Boolean(currentJobId) }),
         });
+        if (result.annotated_markdown) {
+            editor.value = result.annotated_markdown;
+            renderMarkdown();
+            editorStatus.textContent = "Review markers updated";
+        }
         const issues = [...result.errors, ...result.warnings];
         const unsupported = result.grounding?.unsupported_claims?.length || 0;
         const message = issues.length || unsupported
@@ -178,35 +197,6 @@ document.getElementById("validate-note").addEventListener("click", async () => {
             : "檢查通過：Markdown 格式正常，沒有發現缺乏逐字稿支持的說法。";
         showMessage(message, issues.length || unsupported ? "warning" : "success");
     } catch (error) { showMessage(`檢查失敗：${error.message}`, "warning"); }
-});
-
-function currentSection() {
-    const beforeCursor = editor.value.slice(0, editor.selectionStart);
-    const matches = [...beforeCursor.matchAll(/^##\s+(.+)$/gm)];
-    if (!matches.length) return null;
-    const match = matches[matches.length - 1];
-    const start = match.index;
-    const after = editor.value.slice(start + match[0].length);
-    const next = after.search(/^##\s+/m);
-    return { heading:match[1].trim(), start, end:next === -1 ? editor.value.length : start + match[0].length + next };
-}
-
-document.getElementById("regenerate-section").addEventListener("click", async () => {
-    if (!currentJobId) return showMessage("請先完成一個 VideoNote 任務。", "warning");
-    const section = currentSection();
-    if (!section) return showMessage("請先把游標放在要重新生成的二級章節內。", "warning");
-    const instruction = window.prompt(`如何修改「${section.heading}」？`, "改善清晰度並維持逐字稿忠實度。") || "";
-    if (!instruction.trim()) return;
-    try {
-        showMessage(`正在重新生成「${section.heading}」…`, "success");
-        const result = await apiRequest("/api/regenerate-section", {
-            method:"POST",
-            body:JSON.stringify({ job_id:currentJobId, markdown:editor.value, section_heading:section.heading, instruction }),
-        });
-        editor.value = editor.value.slice(0,section.start) + result.section_markdown + "\n\n" + editor.value.slice(section.end).replace(/^\s+/,"");
-        renderMarkdown();
-        showMessage(`「${section.heading}」已重新生成，請檢查內容後再下載。`, "success");
-    } catch (error) { showMessage(`重新生成失敗：${error.message}`, "warning"); }
 });
 
 function noteFilename() {
@@ -218,6 +208,42 @@ document.getElementById("download-note").addEventListener("click", () => {
     const url = URL.createObjectURL(new Blob([editor.value], { type:"text/markdown;charset=utf-8" }));
     const link = Object.assign(document.createElement("a"), { href:url, download:noteFilename() });
     document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+});
+
+document.getElementById("save-vault").addEventListener("click", async () => {
+    try {
+        showMessage("正在安全寫入 Obsidian Vault…", "success");
+        const result = await apiRequest("/api/vault/save", {
+            method:"POST",
+            body:JSON.stringify({
+                markdown:editor.value,
+                folder:currentVaultRelativePath ? null : recommendedVaultFolder,
+                relative_path:currentVaultRelativePath,
+            }),
+        });
+        currentVaultRelativePath = result.relative_path;
+        showMessage(`已儲存到 Vault：${result.relative_path}`, "success");
+    } catch (error) {
+        showMessage(`Vault 儲存失敗：${error.message}`, "warning");
+    }
+});
+
+document.getElementById("publish-note").addEventListener("click", async () => {
+    try {
+        showMessage("正在儲存、建立 Git commit 並推送到 GitHub…", "success");
+        const result = await apiRequest("/api/vault/publish", {
+            method:"POST",
+            body:JSON.stringify({
+                markdown:editor.value,
+                folder:currentVaultRelativePath ? null : recommendedVaultFolder,
+                relative_path:currentVaultRelativePath,
+            }),
+        });
+        currentVaultRelativePath = result.relative_path;
+        showMessage(`已發布：${result.relative_path}（${result.branch}）`, "success");
+    } catch (error) {
+        showMessage(`發布尚未完成：${error.message}`, "warning");
+    }
 });
 
 renderMarkdown();
