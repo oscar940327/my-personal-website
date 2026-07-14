@@ -25,6 +25,13 @@ const STAGE_ORDER = ["video_info", "subtitles", "transcription", "planning", "ge
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const escapeHTML = value => value.replace(/[&<>"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[character]);
 
+function replayEntrance(element, className = "is-entering") {
+    if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    element.classList.remove(className);
+    void element.offsetWidth;
+    element.classList.add(className);
+}
+
 function splitFrontmatter(markdown) {
     const match = markdown.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
     return match ? { frontmatter:match[1].trim(), body:markdown.slice(match[0].length) } : { frontmatter:"", body:markdown };
@@ -67,6 +74,7 @@ editor.addEventListener("input", () => {
 function showMessage(message, type = "warning") {
     validationMessage.className = `validation-message is-${type}`;
     validationMessage.textContent = message;
+    replayEntrance(validationMessage, "is-message-entering");
 }
 
 async function apiRequest(path, options = {}) {
@@ -119,6 +127,7 @@ async function pollJob(jobId) {
 
 async function generateNote() {
     progressCard.classList.remove("is-hidden");
+    replayEntrance(progressCard);
     workspaceCard.classList.add("is-hidden");
     validationMessage.classList.add("is-hidden");
     generateButton.disabled = true;
@@ -145,6 +154,7 @@ async function generateNote() {
         renderMarkdown();
         document.querySelector(".workspace-heading p").textContent = `${result.video.title} · ${result.video.platform} · ${result.transcript.source}`;
         workspaceCard.classList.remove("is-hidden");
+        replayEntrance(workspaceCard);
         generateButton.firstElementChild.textContent = "Generate again";
         workspaceCard.scrollIntoView({ behavior:"smooth", block:"start" });
         currentVaultRelativePath = null;
@@ -166,6 +176,7 @@ async function generateNote() {
         progressPercent.textContent = "Error";
         showMessage(`生成失敗：${error.message}`, "warning");
         workspaceCard.classList.remove("is-hidden");
+        replayEntrance(workspaceCard);
     } finally {
         generateButton.disabled = false;
         if (generateButton.firstElementChild.textContent === "Building…") generateButton.firstElementChild.textContent = "Generate note";
@@ -176,6 +187,7 @@ form.addEventListener("submit", event => { event.preventDefault(); generateNote(
 viewButtons.forEach(button => button.addEventListener("click", () => {
     workspaceGrid.dataset.view = button.dataset.view;
     viewButtons.forEach(item => item.classList.toggle("is-active", item === button));
+    replayEntrance(workspaceGrid, "is-view-entering");
 }));
 
 function noteFilename() {
