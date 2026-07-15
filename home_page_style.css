@@ -204,6 +204,14 @@ body.dark-mode .home-portrait img {
     }
 }
 
+@media (min-width: 1251px) and (max-width: 1439px) {
+    .hero-section,
+    .motivation-section {
+        grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+        column-gap: clamp(40px, 4vw, 64px);
+    }
+}
+
 @media (min-width: 1400px) and (max-width: 1600px) {
     .section-copy {
         --reveal-y: 48px;
@@ -267,6 +275,9 @@ body.dark-mode .home-portrait img {
 }
 
 .home-links a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
     transition: color 0.2s ease, transform 0.2s ease;
 }
 
@@ -403,6 +414,48 @@ body.dark-mode .home-portrait img {
     .home-links {
         align-items: flex-start;
         font-size: 24px;
+    }
+}
+
+@media (max-width: 767px) {
+    .portfolio-home {
+        width: min(100% - 28px, 680px);
+        padding-top: 76px;
+    }
+
+    .hero-section,
+    .motivation-section {
+        row-gap: 36px;
+        padding: 46px 0;
+    }
+
+    .role-label {
+        margin-bottom: 32px;
+        font-size: clamp(14px, 4vw, 18px);
+    }
+
+    .hero-email {
+        font-size: clamp(15px, 4vw, 19px);
+        overflow-wrap: anywhere;
+    }
+
+    .hero-section h1 {
+        font-size: clamp(48px, 17vw, 82px);
+    }
+
+    .about-block h2,
+    .section-copy h2,
+    .skills-section h2,
+    .skill-group h3 {
+        font-size: clamp(23px, 7vw, 30px);
+    }
+
+    .skills-grid {
+        gap: 42px;
+    }
+
+    .skill-tags span {
+        font-size: 14px;
     }
 }
 

@@ -6,9 +6,14 @@ document.querySelectorAll('.theme-toggle').forEach(themeToggle => {
 
 const headerHTML = `
 <header class="site-sidebar" aria-label="Primary navigation">
-    <a class="brand-mark" href="index.html" aria-label="Oscar Cheng home"></a>
+    <a class="brand-mark" href="index.html" aria-label="Oscar Cheng home">OSCAR</a>
 
-    <nav class="sidebar-menu">
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-menu" aria-label="Open navigation menu">
+        <span></span>
+        <span></span>
+    </button>
+
+    <nav class="sidebar-menu" id="primary-menu">
         <a href="index.html">HOME</a>
         <a href="project_page.html">PROJECT</a>
         <a href="timeline_page.html">JOURNEY</a>
@@ -64,8 +69,7 @@ const headerHTML = `
 
         sessionStorage.removeItem('internalPageNavigation');
 
-        const hamMenu = document.querySelector('.hamburger-menu');
-        const offScreenMenu = document.querySelector('.off-screen-menu');
+        const navToggle = document.querySelector('.nav-toggle');
         const sidebarMenu = document.querySelector('.sidebar-menu');
         const sidebarLinks = sidebarMenu ? Array.from(sidebarMenu.querySelectorAll('a')) : [];
         let activeSidebarLink = null;
@@ -136,10 +140,34 @@ const headerHTML = `
             });
         }
 
-        if (hamMenu && offScreenMenu) {
-            hamMenu.addEventListener('click', () => {
-                hamMenu.classList.toggle('active');
-                offScreenMenu.classList.toggle('active');
+        if (navToggle && sidebarMenu) {
+            const setMenuOpen = isOpen => {
+                navToggle.classList.toggle('is-open', isOpen);
+                sidebarMenu.classList.toggle('is-open', isOpen);
+                navToggle.setAttribute('aria-expanded', String(isOpen));
+                navToggle.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
+                document.body.classList.toggle('nav-open', isOpen);
+            };
+
+            navToggle.addEventListener('click', () => {
+                setMenuOpen(navToggle.getAttribute('aria-expanded') !== 'true');
+            });
+
+            sidebarLinks.forEach(link => {
+                link.addEventListener('click', () => setMenuOpen(false));
+            });
+
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') {
+                    setMenuOpen(false);
+                    navToggle.focus();
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 767) {
+                    setMenuOpen(false);
+                }
             });
         }
 

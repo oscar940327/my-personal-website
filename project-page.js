@@ -11,17 +11,64 @@ if (showcase && visualTrack && copies.length > 0) {
     const projectCount = copies.length;
     const maxProject = projectCount - 1;
     const textRevealDelay = 400;
+    const visuals = Array.from(visualTrack.querySelectorAll('.project-visual'));
+
+    const mobileList = document.createElement('section');
+    mobileList.className = 'project-mobile-list';
+    mobileList.setAttribute('aria-label', 'Projects');
+
+    copies.forEach((copy, index) => {
+        const panel = document.createElement('article');
+        const image = visuals[index]?.querySelector('img')?.cloneNode(true);
+        const mobileCopy = copy.cloneNode(true);
+        const projectTitle = copy.querySelector('h2')?.textContent.trim() || `Project ${index + 1}`;
+
+        panel.className = 'mobile-project';
+        if (image) {
+            image.alt = `${projectTitle} project preview`;
+            const figure = document.createElement('figure');
+            figure.className = 'mobile-project-visual';
+            figure.append(image);
+            panel.append(figure);
+        }
+
+        mobileCopy.classList.remove('is-active');
+        mobileCopy.classList.add('mobile-project-copy');
+        const projectNumber = document.createElement('p');
+        projectNumber.className = 'mobile-project-index';
+        projectNumber.textContent = `[ ${String(index + 1).padStart(2, '0')} / ${String(copies.length).padStart(2, '0')} ]`;
+        mobileCopy.prepend(projectNumber);
+        panel.append(mobileCopy);
+        mobileList.append(panel);
+    });
+
+    showcase.append(mobileList);
+
+    if ('IntersectionObserver' in window) {
+        const mobileObserver = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    mobileObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
+
+        mobileList.querySelectorAll('.mobile-project').forEach(panel => mobileObserver.observe(panel));
+    } else {
+        mobileList.querySelectorAll('.mobile-project').forEach(panel => panel.classList.add('is-visible'));
+    }
 
     showcase.style.setProperty('--project-count', projectCount);
     document.documentElement.style.setProperty('--project-count', projectCount);
     document.body.style.setProperty('--project-count', projectCount);
 
     const syncScrollAxis = () => {
-        document.body.dataset.scrollAxis = window.matchMedia('(max-width: 760px)').matches ? 'x' : 'y';
+        document.body.dataset.scrollAxis = 'y';
     };
 
     const syncImageStartPosition = () => {
-        if (!indexLabel) {
+        if (!indexLabel || window.matchMedia('(max-width: 900px)').matches) {
             return;
         }
 
@@ -57,10 +104,13 @@ if (showcase && visualTrack && copies.length > 0) {
     };
 
     const syncWithScroll = () => {
-        const isSingleColumn = window.matchMedia('(max-width: 760px)').matches;
-        const stageSize = isSingleColumn ? window.innerWidth : window.innerHeight;
-        const scrollPosition = isSingleColumn ? window.scrollX : window.scrollY;
-        const showcaseStart = isSingleColumn ? showcase.offsetLeft : showcase.offsetTop;
+        if (window.matchMedia('(max-width: 900px)').matches) {
+            return;
+        }
+
+        const stageSize = window.innerHeight;
+        const scrollPosition = window.scrollY;
+        const showcaseStart = showcase.offsetTop;
         const rawProgress = (scrollPosition - showcaseStart) / stageSize;
         const progress = Math.max(0, Math.min(rawProgress, maxProject));
         const nextProject = Math.max(0, Math.min(Math.round(progress), maxProject));
