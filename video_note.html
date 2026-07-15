@@ -84,17 +84,14 @@
                     <div class="vault-destination-copy">
                         <span class="vault-icon" aria-hidden="true">⌁</span>
                         <div>
-                            <div class="vault-title-row">
-                                <h3 id="vault-destination-title">Vault 分類</h3>
-                                <span class="recommendation-badge">LLM 建議</span>
-                            </div>
+                            <div class="vault-title-row"><h3 id="vault-destination-title">Vault 分類</h3></div>
                             <p id="vault-recommendation">正在讀取 note-garden 分類…</p>
                         </div>
                     </div>
                     <div class="vault-controls">
                         <label for="vault-folder-select">
-                            <span>儲存位置</span>
-                            <select id="vault-folder-select" aria-describedby="vault-recommendation"></select>
+                            <span class="vault-control-label"><span class="label-dot"></span>儲存位置</span>
+                            <span class="select-shell"><select id="vault-folder-select" aria-describedby="vault-recommendation"></select><span class="select-arrow" aria-hidden="true">↓</span></span>
                         </label>
                         <label class="new-folder-field is-hidden" id="new-folder-field" for="vault-new-folder">
                             <span>新分類名稱</span>
@@ -118,7 +115,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
-    <script src="video-note.js?v=20260715-1" defer></script>
+    <script src="video-note.js?v=20260715-2" defer></script>
     <script src="header-placeholder.js?v=20260713-1" defer></script>
 </body>
 </html>

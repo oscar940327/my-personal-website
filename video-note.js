@@ -87,6 +87,14 @@ function uniqueFolders(folders) {
         .sort((left, right) => left.localeCompare(right, "zh-Hant"));
 }
 
+function oneSentenceChineseReason(reason) {
+    const value = String(reason || "").trim();
+    if (!/[\u3400-\u9fff]/.test(value)) return "依照筆記的核心主題，建議歸入此分類。";
+    const firstSentence = value.split(/(?<=[。！？])/u)[0].replace(/[。！？]*$/, "").trim();
+    const concise = firstSentence.length > 48 ? `${firstSentence.slice(0, 48)}…` : firstSentence;
+    return `${concise || "依照筆記的核心主題，建議歸入此分類"}。`;
+}
+
 function setVaultFolderOptions(folders, selectedFolder) {
     const values = uniqueFolders([...folders, selectedFolder || ""]);
     vaultFolderSelect.replaceChildren(...values.map(folder => {
@@ -145,8 +153,7 @@ async function prepareVaultDestination(markdown) {
     if (recommendationResult.status === "fulfilled") {
         const recommendation = recommendationResult.value;
         recommendedVaultFolder = recommendation.folder;
-        const confidence = Math.round(Number(recommendation.confidence || 0) * 100);
-        vaultRecommendation.textContent = `建議「${recommendation.folder}」· 信心 ${confidence}% · ${recommendation.reason}`;
+        vaultRecommendation.textContent = `LLM 建議：${recommendation.folder}，${oneSentenceChineseReason(recommendation.reason)}`;
         setVaultFolderOptions(folders, recommendation.folder);
     } else {
         recommendedVaultFolder = fallback;
@@ -258,6 +265,9 @@ viewButtons.forEach(button => button.addEventListener("click", () => {
 }));
 vaultFolderSelect.addEventListener("change", () => {
     toggleNewFolderField();
+    vaultFolderSelect.closest(".select-shell")?.classList.remove("is-selecting");
+    void vaultFolderSelect.offsetWidth;
+    vaultFolderSelect.closest(".select-shell")?.classList.add("is-selecting");
     if (currentVaultRelativePath) showMessage("分類已調整；下次儲存或發布會安全搬移現有筆記。", "success");
 });
 vaultNewFolder.addEventListener("input", () => {
