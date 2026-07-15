@@ -17,6 +17,11 @@ const preview = document.getElementById("markdown-preview");
 const editorStatus = document.getElementById("editor-status");
 const wordCount = document.getElementById("word-count");
 const validationMessage = document.getElementById("validation-message");
+const vaultDestination = document.getElementById("vault-destination");
+const vaultFolderSelect = document.getElementById("vault-folder-select");
+const newFolderField = document.getElementById("new-folder-field");
+const vaultNewFolder = document.getElementById("vault-new-folder");
+const vaultRecommendation = document.getElementById("vault-recommendation");
 let currentJobId = null;
 let currentVaultRelativePath = null;
 let recommendedVaultFolder = null;
@@ -75,6 +80,79 @@ function showMessage(message, type = "warning") {
     validationMessage.className = `validation-message is-${type}`;
     validationMessage.textContent = message;
     replayEntrance(validationMessage, "is-message-entering");
+}
+
+function uniqueFolders(folders) {
+    return [...new Set(folders.map(folder => String(folder).trim()).filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right, "zh-Hant"));
+}
+
+function setVaultFolderOptions(folders, selectedFolder) {
+    const values = uniqueFolders([...folders, selectedFolder || ""]);
+    vaultFolderSelect.replaceChildren(...values.map(folder => {
+        const option = document.createElement("option");
+        option.value = folder;
+        option.textContent = folder;
+        return option;
+    }));
+    const newOption = document.createElement("option");
+    newOption.value = "__new__";
+    newOption.textContent = "＋ 建立新分類";
+    vaultFolderSelect.appendChild(newOption);
+    vaultFolderSelect.value = selectedFolder && values.includes(selectedFolder) ? selectedFolder : (values[0] || "__new__");
+    toggleNewFolderField(false);
+}
+
+function toggleNewFolderField(focusInput = true) {
+    const creating = vaultFolderSelect.value === "__new__";
+    newFolderField.classList.toggle("is-hidden", !creating);
+    if (creating) {
+        replayEntrance(newFolderField, "is-revealing");
+        if (focusInput) vaultNewFolder.focus();
+    }
+}
+
+function selectedVaultFolder() {
+    const selected = vaultFolderSelect.value === "__new__" ? vaultNewFolder.value.trim() : vaultFolderSelect.value.trim();
+    if (!selected) throw new Error("請選擇分類，或輸入新分類名稱。");
+    if (/\.\.|[\\/:]/.test(selected)) throw new Error("分類名稱不能包含斜線、冒號或 ..。");
+    return selected;
+}
+
+function rememberVaultFolder(folder) {
+    const options = [...vaultFolderSelect.options];
+    if (!options.some(option => option.value === folder)) {
+        const option = document.createElement("option");
+        option.value = folder;
+        option.textContent = folder;
+        vaultFolderSelect.insertBefore(option, options.find(option => option.value === "__new__") || null);
+    }
+    vaultFolderSelect.value = folder;
+    vaultNewFolder.value = "";
+    toggleNewFolderField(false);
+}
+
+async function prepareVaultDestination(markdown) {
+    vaultRecommendation.textContent = "正在讀取 note-garden 分類…";
+    vaultDestination.classList.remove("is-hidden");
+    replayEntrance(vaultDestination, "is-revealing");
+    const [foldersResult, recommendationResult] = await Promise.allSettled([
+        apiRequest("/api/vault/folders"),
+        apiRequest("/api/vault/classify", { method:"POST", body:JSON.stringify({ markdown }) }),
+    ]);
+    const folders = foldersResult.status === "fulfilled" ? foldersResult.value.folders : [];
+    const fallback = foldersResult.status === "fulfilled" ? foldersResult.value.default : null;
+    if (recommendationResult.status === "fulfilled") {
+        const recommendation = recommendationResult.value;
+        recommendedVaultFolder = recommendation.folder;
+        const confidence = Math.round(Number(recommendation.confidence || 0) * 100);
+        vaultRecommendation.textContent = `建議「${recommendation.folder}」· 信心 ${confidence}% · ${recommendation.reason}`;
+        setVaultFolderOptions(folders, recommendation.folder);
+    } else {
+        recommendedVaultFolder = fallback;
+        vaultRecommendation.textContent = "LLM 建議暫時無法使用，請自行選擇分類後再儲存。";
+        setVaultFolderOptions(folders.length ? folders : ["Inbox"], fallback || "Inbox");
+    }
 }
 
 async function apiRequest(path, options = {}) {
@@ -159,18 +237,7 @@ async function generateNote() {
         workspaceCard.scrollIntoView({ behavior:"smooth", block:"start" });
         currentVaultRelativePath = null;
         recommendedVaultFolder = null;
-        try {
-            const recommendation = await apiRequest("/api/vault/classify", {
-                method:"POST",
-                body:JSON.stringify({ markdown:editor.value }),
-            });
-            recommendedVaultFolder = recommendation.folder;
-            showMessage(`建議儲存位置：${recommendation.folder}/${recommendation.filename}`, "success");
-        } catch (error) {
-            showMessage(`筆記已完成；Vault 分類暫時無法使用：${error.message}`, "warning");
-        }
-        const unsupported = result.validation.grounding?.unsupported_claims?.length || 0;
-        if (unsupported) showMessage(`筆記已完成，但有 ${unsupported} 個說法需要人工確認。`, "warning");
+        await prepareVaultDestination(editor.value);
     } catch (error) {
         progressDetail.textContent = `Failed: ${error.message}`;
         progressPercent.textContent = "Error";
@@ -189,6 +256,15 @@ viewButtons.forEach(button => button.addEventListener("click", () => {
     viewButtons.forEach(item => item.classList.toggle("is-active", item === button));
     replayEntrance(workspaceGrid, "is-view-entering");
 }));
+vaultFolderSelect.addEventListener("change", () => {
+    toggleNewFolderField();
+    if (currentVaultRelativePath) showMessage("分類已調整；下次儲存或發布會安全搬移現有筆記。", "success");
+});
+vaultNewFolder.addEventListener("input", () => {
+    if (currentVaultRelativePath && vaultNewFolder.value.trim()) {
+        validationMessage.classList.add("is-hidden");
+    }
+});
 
 function noteFilename() {
     const title = editor.value.match(/^#\s+(.+)$/m)?.[1] || "VideoNote";
@@ -203,17 +279,20 @@ document.getElementById("download-note").addEventListener("click", () => {
 
 document.getElementById("save-vault").addEventListener("click", async () => {
     try {
+        const folder = selectedVaultFolder();
         showMessage("正在安全寫入 Obsidian Vault…", "success");
         const result = await apiRequest("/api/vault/save", {
             method:"POST",
             body:JSON.stringify({
                 markdown:editor.value,
-                folder:currentVaultRelativePath ? null : recommendedVaultFolder,
+                folder,
                 relative_path:currentVaultRelativePath,
             }),
         });
         currentVaultRelativePath = result.relative_path;
-        showMessage(`已儲存到 Vault：${result.relative_path}`, "success");
+        rememberVaultFolder(folder);
+        const moved = result.moved_from ? `（已從 ${result.moved_from} 搬移）` : "";
+        showMessage(`已儲存到 Vault：${result.relative_path}${moved}`, "success");
     } catch (error) {
         showMessage(`Vault 儲存失敗：${error.message}`, "warning");
     }
@@ -221,17 +300,20 @@ document.getElementById("save-vault").addEventListener("click", async () => {
 
 document.getElementById("publish-note").addEventListener("click", async () => {
     try {
+        const folder = selectedVaultFolder();
         showMessage("正在儲存、建立 Git commit 並推送到 GitHub…", "success");
         const result = await apiRequest("/api/vault/publish", {
             method:"POST",
             body:JSON.stringify({
                 markdown:editor.value,
-                folder:currentVaultRelativePath ? null : recommendedVaultFolder,
+                folder,
                 relative_path:currentVaultRelativePath,
             }),
         });
         currentVaultRelativePath = result.relative_path;
-        showMessage(`已發布：${result.relative_path}（${result.branch}）`, "success");
+        rememberVaultFolder(folder);
+        const moved = result.moved_from ? `，已從 ${result.moved_from} 搬移` : "";
+        showMessage(`已發布：${result.relative_path}（${result.branch}）${moved}`, "success");
     } catch (error) {
         showMessage(`發布尚未完成：${error.message}`, "warning");
     }
