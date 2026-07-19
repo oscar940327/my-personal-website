@@ -42,6 +42,7 @@ const reportOutput = document.getElementById("report-output");
 const responseStatus = document.getElementById("response-status");
 const dataFreshnessStatus = document.getElementById("data-freshness-status");
 const mlReferenceStatus = document.getElementById("ml-reference-status");
+const agentFlowStatus = document.getElementById("agent-flow-status");
 const pricePlanList = document.getElementById("price-plan-list");
 const newsImpactList = document.getElementById("news-impact-list");
 const jsonOutput = document.getElementById("json-output");
@@ -50,6 +51,7 @@ apiStatus.textContent = "Backend";
 addTraceLines();
 setDataFreshnessStatus();
 setMlReferenceStatus();
+setAgentFlowStatus();
 checkApiHealth();
 window.setInterval(checkApiHealth, 15000);
 
@@ -200,6 +202,7 @@ async function runAnalysis(endpoint, payload, mode) {
     setReportStatus("Running", "running");
     setDataFreshnessStatus();
     setMlReferenceStatus();
+    setAgentFlowStatus();
     reportCard.classList.add("is-empty");
     reportOutput.textContent = "Analyzing structured market data...";
     formNote.classList.remove("is-error");
@@ -226,6 +229,7 @@ async function runAnalysis(endpoint, payload, mode) {
         setReportStatus("Error", "error");
         setDataFreshnessStatus();
         setMlReferenceStatus();
+        setAgentFlowStatus();
         summaryGrid.innerHTML = renderSummaryItems([
             ["估值", "無法分析"],
             ["技術", "無法分析"],
@@ -260,6 +264,7 @@ function renderResult(result, mode, payload) {
     setReportStatus(buildEvidenceStatusLabel(result, data), getEvidenceStatusLevel(result, data));
     setDataFreshnessStatus(resolveDataFreshnessForStatus(result, data));
     setMlReferenceStatus(resolveMlResearchForStatus(result, data), data.ml_prediction);
+    setAgentFlowStatus(data.agentic_orchestration);
     reportCard.classList.remove("is-empty");
     jsonOutput.textContent = JSON.stringify(buildStructuredDebugView(withRequestOptions(result, payload)), null, 2);
 
@@ -390,6 +395,37 @@ function setMlReferenceStatus(mlResearch = null, mlPrediction = null) {
         "is-unknown"
     );
     mlReferenceStatus.classList.add(`is-${status.level}`);
+}
+
+function setAgentFlowStatus(orchestration = null) {
+    const status = buildAgentFlowStatus(orchestration);
+    agentFlowStatus.textContent = `Agent Flow: ${status.label}`;
+    agentFlowStatus.classList.remove(
+        "is-high",
+        "is-medium",
+        "is-warning",
+        "is-neutral",
+        "is-unknown"
+    );
+    agentFlowStatus.classList.add(`is-${status.level}`);
+}
+
+function buildAgentFlowStatus(orchestration = null) {
+    const mode = String(orchestration?.mode_used || "").toLowerCase();
+
+    if (orchestration?.fallback_used || mode === "fixed_fallback") {
+        return { label: "Fallback", level: "warning" };
+    }
+
+    if (mode === "llm") {
+        return { label: "LLM", level: "high" };
+    }
+
+    if (mode === "fixed") {
+        return { label: "Fixed", level: "neutral" };
+    }
+
+    return { label: "Unknown", level: "unknown" };
 }
 
 function buildMlReferenceStatus(mlResearch = null, mlPrediction = null) {
@@ -566,6 +602,9 @@ function buildSingleStockDebugView(result, data) {
         exit_signal: summarizeExitSignal(data.exit_signal || data.agent_outputs?.exit_signal?.payload || data.agent_outputs?.exit_signal || {}),
         evidence_quality: data.evidence_quality || data.research_profile?.evidence_quality || {},
         data_freshness: data.data_freshness || {},
+        agentic_orchestration: summarizeAgenticOrchestration(data.agentic_orchestration),
+        agentic_outputs: data.agentic_outputs || {},
+        research_scope: data.research_scope || {},
         analyst: result.analyst || {},
         error: result.error || null,
     };
@@ -689,6 +728,9 @@ function buildBacktestDebugView(result, data) {
         data_window: data.data_window || {},
         metrics: data.report?.metrics || {},
         evidence_quality: evidenceQuality,
+        agentic_orchestration: summarizeAgenticOrchestration(data.agentic_orchestration),
+        agentic_outputs: data.agentic_outputs || {},
+        research_scope: data.research_scope || {},
         analyst: result.analyst || {},
         error: result.error || null,
     };
@@ -709,6 +751,9 @@ function buildThemeDebugView(result, data) {
         data_freshness: summarizeThemeDataFreshness(data) || {},
         ml_reference: summarizeMlReference(resolveMlResearchForStatus(result, data)),
         theme_ml_reference: data.theme_ml_reference || {},
+        agentic_orchestration: summarizeAgenticOrchestration(data.agentic_orchestration),
+        agentic_outputs: data.agentic_outputs || {},
+        research_scope: data.research_scope || {},
         analyst: result.analyst || {},
         error: result.error || null,
     };
@@ -725,6 +770,23 @@ function buildPortfolioDebugView(result, data) {
         concentration: data.concentration || {},
         theme_exposure: data.theme_exposure || {},
         error: result.error || null,
+    };
+}
+
+function summarizeAgenticOrchestration(orchestration = {}) {
+    return {
+        version: orchestration.version,
+        status: orchestration.status,
+        requested_mode: orchestration.requested_mode,
+        mode_used: orchestration.mode_used,
+        fallback_used: orchestration.fallback_used,
+        fallback_reason: orchestration.fallback_reason,
+        plan: orchestration.plan || {},
+        conflict_detected: orchestration.conflict_detected,
+        conflicting_agents: orchestration.conflicting_agents || [],
+        decision_trace: orchestration.decision_trace || {},
+        limits: orchestration.limits || {},
+        safety: orchestration.safety || {},
     };
 }
 
