@@ -6,7 +6,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="video_note_style.css?v=20260716-1">
+    <link rel="stylesheet" href="video_note_style.css?v=20260725-5">
     <link rel="stylesheet" href="header_style.css?v=20260716-1">
     <link rel="icon" href="images/icon3.png" type="image/x-icon">
     <title>VideoNote</title>
@@ -40,13 +40,15 @@
                         </div>
                     </label>
                     <details class="advanced-settings">
-                        <summary>Note settings</summary>
-                        <div class="settings-grid">
-                            <label><span>Output language</span><select id="output-language"><option value="zh-TW">繁體中文</option><option value="en">English</option></select></label>
-                            <label><span>Whisper model</span><select id="whisper-model"><option value="small">Small</option><option value="medium">Medium</option><option value="large-v3" selected>Large-v3</option></select></label>
-                            <label><span>Bilibili login</span><select id="cookies-browser"><option value="">No browser cookies</option><option value="chrome">Use Chrome login</option><option value="edge">Use Edge login</option></select></label>
+                        <summary><span>Note settings</span><span class="settings-toggle-icon" aria-hidden="true"></span></summary>
+                        <div class="settings-content">
+                            <div class="settings-grid">
+                                <label><span>Output language</span><span class="settings-select-shell"><select id="output-language"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><span class="settings-select-arrow" aria-hidden="true"></span></span></label>
+                                <label><span>Whisper model</span><span class="settings-select-shell"><select id="whisper-model"><option value="small">Small</option><option value="medium">Medium</option><option value="large-v3" selected>Large-v3</option></select><span class="settings-select-arrow" aria-hidden="true"></span></span></label>
+                                <label><span>Bilibili login</span><span class="settings-select-shell"><select id="cookies-browser"><option value="">No browser cookies</option><option value="chrome">Use Chrome login</option><option value="edge">Use Edge login</option></select><span class="settings-select-arrow" aria-hidden="true"></span></span></label>
+                            </div>
+                            <label class="cpu-option"><input id="force-cpu" type="checkbox"><span>Force CPU（CUDA 環境不完整時使用）</span></label>
                         </div>
-                        <label class="cpu-option"><input id="force-cpu" type="checkbox"><span>Force CPU（CUDA 環境不完整時使用）</span></label>
                     </details>
                 </form>
             </section>
@@ -115,7 +117,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
-    <script src="video-note.js?v=20260715-2" defer></script>
+    <script src="video-note.js?v=20260725-2" defer></script>
     <script src="header-placeholder.js?v=20260716-1" defer></script>
 </body>
 </html>

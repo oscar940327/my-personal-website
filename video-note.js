@@ -22,8 +22,161 @@ const vaultFolderSelect = document.getElementById("vault-folder-select");
 const newFolderField = document.getElementById("new-folder-field");
 const vaultNewFolder = document.getElementById("vault-new-folder");
 const vaultRecommendation = document.getElementById("vault-recommendation");
+const advancedSettings = document.querySelector(".advanced-settings");
 let currentJobId = null;
 let currentVaultRelativePath = null;
+
+function setupAdvancedSettingsAnimation() {
+    if (!advancedSettings) return;
+    const summary = advancedSettings.querySelector("summary");
+    const content = advancedSettings.querySelector(".settings-content");
+    const duration = 440;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    advancedSettings.classList.add("is-ready");
+    if (advancedSettings.open) {
+        content.style.height = "auto";
+        content.style.opacity = "1";
+        advancedSettings.classList.add("is-expanded");
+    }
+
+    summary.addEventListener("click", event => {
+        event.preventDefault();
+        if (reducedMotion.matches) {
+            advancedSettings.open = !advancedSettings.open;
+            advancedSettings.classList.toggle("is-expanded", advancedSettings.open);
+            content.style.height = advancedSettings.open ? "auto" : "0px";
+            content.style.opacity = advancedSettings.open ? "1" : "0";
+            return;
+        }
+        if (advancedSettings.classList.contains("is-animating")) return;
+        advancedSettings.classList.add("is-animating");
+
+        if (!advancedSettings.open) {
+            advancedSettings.open = true;
+            const targetHeight = content.scrollHeight;
+            content.style.height = "0px";
+            content.style.opacity = "0";
+            requestAnimationFrame(() => {
+                advancedSettings.classList.add("is-expanded");
+                content.style.transition = `height ${duration}ms cubic-bezier(.2,.8,.2,1), opacity 280ms ease`;
+                content.style.height = `${targetHeight}px`;
+                content.style.opacity = "1";
+            });
+            window.setTimeout(() => {
+                content.style.height = "auto";
+                advancedSettings.classList.remove("is-animating");
+            }, duration);
+            return;
+        }
+
+        content.style.height = `${content.scrollHeight}px`;
+        advancedSettings.classList.add("is-collapsing");
+        advancedSettings.classList.remove("is-expanded");
+        requestAnimationFrame(() => {
+            content.style.transition = `height ${duration}ms cubic-bezier(.4,0,.2,1), opacity 260ms ease 100ms`;
+            content.style.height = "0px";
+            content.style.opacity = "0";
+        });
+        window.setTimeout(() => {
+            advancedSettings.open = false;
+            advancedSettings.classList.remove("is-collapsing", "is-animating");
+        }, duration);
+    });
+}
+
+setupAdvancedSettingsAnimation();
+
+function setupCustomSettingsSelects() {
+    const shells = [...document.querySelectorAll(".settings-select-shell")];
+    const closeAll = except => shells.forEach(shell => {
+        if (shell !== except) {
+            shell.classList.remove("is-open");
+            shell.querySelector(".custom-select-trigger")?.setAttribute("aria-expanded", "false");
+        }
+    });
+
+    shells.forEach((shell, selectIndex) => {
+        const select = shell.querySelector("select");
+        if (!select || shell.classList.contains("is-enhanced")) return;
+        const menuId = `settings-select-menu-${selectIndex}`;
+        const trigger = document.createElement("button");
+        const value = document.createElement("span");
+        const arrow = document.createElement("span");
+        const menu = document.createElement("div");
+
+        trigger.type = "button";
+        trigger.className = "custom-select-trigger";
+        trigger.setAttribute("aria-haspopup", "listbox");
+        trigger.setAttribute("aria-expanded", "false");
+        trigger.setAttribute("aria-controls", menuId);
+        value.className = "custom-select-value";
+        arrow.className = "custom-select-arrow";
+        arrow.setAttribute("aria-hidden", "true");
+        trigger.append(value, arrow);
+
+        menu.id = menuId;
+        menu.className = "custom-select-menu";
+        menu.setAttribute("role", "listbox");
+        [...select.options].forEach((option, optionIndex) => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "custom-select-option";
+            item.textContent = option.textContent;
+            item.dataset.value = option.value;
+            item.setAttribute("role", "option");
+            item.style.setProperty("--option-index", optionIndex);
+            item.addEventListener("click", () => {
+                select.value = option.value;
+                select.dispatchEvent(new Event("change", { bubbles:true }));
+                closeAll();
+                trigger.focus();
+            });
+            menu.appendChild(item);
+        });
+
+        const syncValue = () => {
+            const selected = select.options[select.selectedIndex];
+            value.textContent = selected?.textContent || "";
+            menu.querySelectorAll(".custom-select-option").forEach(item => {
+                item.setAttribute("aria-selected", String(item.dataset.value === select.value));
+            });
+            shell.classList.remove("is-selecting");
+            void shell.offsetWidth;
+            shell.classList.add("is-selecting");
+        };
+
+        trigger.addEventListener("click", () => {
+            const opening = !shell.classList.contains("is-open");
+            closeAll(opening ? shell : null);
+            shell.classList.toggle("is-open", opening);
+            trigger.setAttribute("aria-expanded", String(opening));
+        });
+        trigger.addEventListener("keydown", event => {
+            if (event.key === "Escape") {
+                shell.classList.remove("is-open");
+                trigger.setAttribute("aria-expanded", "false");
+            }
+        });
+        shell.addEventListener("keydown", event => {
+            if (event.key === "Escape") {
+                shell.classList.remove("is-open");
+                trigger.setAttribute("aria-expanded", "false");
+                trigger.focus();
+            }
+        });
+        select.addEventListener("change", syncValue);
+        shell.append(trigger, menu);
+        shell.classList.add("is-enhanced");
+        syncValue();
+    });
+
+    document.addEventListener("click", event => {
+        if (!event.target.closest(".settings-select-shell")) closeAll();
+    });
+}
+
+setupCustomSettingsSelects();
 let recommendedVaultFolder = null;
 
 const STAGE_ORDER = ["video_info", "subtitles", "transcription", "planning", "generation"];
