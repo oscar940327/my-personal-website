@@ -1,3 +1,8 @@
 .claude/
 Oscar_Cheng_Resume.docx
 DESIGN_NOTES.md
+dist/
+node_modules/
+playwright-report/
+test-results/
+*.tsbuildinfo
