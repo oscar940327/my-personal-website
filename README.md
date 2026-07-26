@@ -16,8 +16,8 @@ Website: https://oscar940327.github.io/my-personal-website/
   Timeline of important learning and project milestones.
 
 - `diary.html`
-  React and TypeScript Diary page. It calls the separately running FastAPI
-  readiness endpoint before later Diary tickets add authenticated records.
+  React and TypeScript Diary page. Its pre-created owner signs in through a
+  Supabase Magic Link before the page exposes the protected FastAPI shell.
 
 ## Features
 
@@ -46,6 +46,12 @@ Requirements:
 
 - Node.js 24 or newer
 - The Diary FastAPI service running at `http://127.0.0.1:8000`
+- The sibling Diary repository's local Supabase stack running
+
+Copy `.env.example` to `.env.local`, then replace
+`VITE_SUPABASE_PUBLISHABLE_KEY` with the local publishable key shown by
+`npm.cmd run supabase -- status -o env` in the Diary repository. This key and
+the Supabase URL are intentionally public browser configuration.
 
 ```powershell
 npm.cmd install
@@ -56,10 +62,13 @@ Open `http://127.0.0.1:5173/my-personal-website/diary.html`.
 
 During local development, Vite proxies `/diary-api` to
 `http://127.0.0.1:8000`, so the browser can reach the separately running API
-without requiring production CORS policy in this ticket.
+while FastAPI separately allows the local Vite origins.
 
-`VITE_DIARY_API_URL` is a public backend URL, not a secret. Do not put database,
-AI provider, Azure, or authentication secrets in Vite variables.
+`VITE_DIARY_API_URL`, `VITE_SUPABASE_URL`, and
+`VITE_SUPABASE_PUBLISHABLE_KEY` are public browser values. Do not put a
+Supabase service-role key, JWT private key or secret, database credential, AI
+provider key, Azure secret, or container-registry credential in any Vite
+variable.
 
 ## Verification
 
@@ -73,9 +82,15 @@ npm.cmd run verify:build
 The production build uses the `/my-personal-website/` GitHub Pages base and
 retains the existing HTML pages, scripts, styles, images, and resume.
 
-The Pages workflow expects an optional repository variable named
-`DIARY_API_URL`. Until the production FastAPI URL exists, its non-secret
-placeholder makes the Diary page show the designed unavailable state.
+The Pages workflow reads three GitHub Actions repository variables:
+
+- `DIARY_API_URL`
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+
+Their checked-in fallbacks contain no credential and keep pull-request builds
+testable. Configure the real public values before using the deployed Diary
+authentication flow.
 - Google Fonts
 
 ## Contact

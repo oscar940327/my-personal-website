@@ -1,3 +1,5 @@
+import { readDiaryPublicConfig } from "./config";
+
 export type HealthState = "checking" | "ready" | "unavailable";
 
 type HealthResponse = {
@@ -5,13 +7,10 @@ type HealthResponse = {
   status: string;
 };
 
-const DEFAULT_API_BASE_URL = "/diary-api";
-
 export async function checkDiaryApi(
   signal: AbortSignal,
 ): Promise<Exclude<HealthState, "checking">> {
-  const apiBaseUrl =
-    import.meta.env.VITE_DIARY_API_URL?.trim() || DEFAULT_API_BASE_URL;
+  const { apiBaseUrl } = readDiaryPublicConfig();
   const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/health`;
 
   try {
@@ -32,5 +31,47 @@ export async function checkDiaryApi(
       : "unavailable";
   } catch {
     return "unavailable";
+  }
+}
+
+type OwnerResponse = {
+  owner_id: string;
+  status: string;
+};
+
+export type ProtectedAccess =
+  | { state: "ready" }
+  | { state: "unauthorized" }
+  | { state: "unavailable" };
+
+export async function checkProtectedOwnerAccess(
+  accessToken: string,
+  signal: AbortSignal,
+): Promise<ProtectedAccess> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/auth/me`;
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    });
+
+    if (response.status === 401) {
+      return { state: "unauthorized" };
+    }
+    if (!response.ok) {
+      return { state: "unavailable" };
+    }
+
+    const body = (await response.json()) as OwnerResponse;
+    return body.status === "authenticated" && Boolean(body.owner_id)
+      ? { state: "ready" }
+      : { state: "unavailable" };
+  } catch {
+    return { state: "unavailable" };
   }
 }

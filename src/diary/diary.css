@@ -48,6 +48,13 @@ body {
   line-height: 0.9;
 }
 
+.diary-shell h2 {
+  margin: 2.5rem 0 0;
+  font-family: "Poppins", sans-serif;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 500;
+}
+
 .diary-intro {
   max-width: 34rem;
   margin: 2rem 0 0;
@@ -83,6 +90,66 @@ body {
 
 .diary-health--unavailable span {
   background: #a45145;
+}
+
+.diary-auth-form {
+  width: min(32rem, 100%);
+  margin-top: 2rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.diary-auth-form label {
+  color: #4f5149;
+  font-family: "DM Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.diary-auth-form input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgb(47 47 47 / 28%);
+  border-radius: 0.65rem;
+  background: rgb(255 255 255 / 45%);
+  color: inherit;
+  font: inherit;
+}
+
+.diary-auth-form input:focus-visible,
+.diary-auth-form button:focus-visible,
+.diary-secondary-action:focus-visible {
+  outline: 3px solid rgb(77 122 85 / 35%);
+  outline-offset: 2px;
+}
+
+.diary-auth-form button,
+.diary-secondary-action {
+  width: fit-content;
+  min-height: 2.75rem;
+  padding: 0.7rem 1.1rem;
+  border: 1px solid #3e5943;
+  border-radius: 999px;
+  background: #3e5943;
+  color: #fff;
+  cursor: pointer;
+  font: 500 0.84rem "DM Mono", monospace;
+}
+
+.diary-secondary-action {
+  margin-top: 1.5rem;
+  border-color: rgb(47 47 47 / 28%);
+  background: transparent;
+  color: #2f2f2f;
+}
+
+.diary-auth-error {
+  max-width: 36rem;
+  margin: 1rem 0 0;
+  color: #8b3f36;
+  line-height: 1.6;
 }
 
 @media (max-width: 1250px) {

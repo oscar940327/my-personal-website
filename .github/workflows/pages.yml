@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_DIARY_API_URL: ${{ vars.DIARY_API_URL || 'https://diary-api.invalid' }}
+      VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://not-configured.supabase.co' }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_not_configured' }}
 
     steps:
       - name: Check out source

@@ -18,6 +18,10 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4173",
+    env: {
+      VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_local_browser_test",
+      VITE_SUPABASE_URL: "http://127.0.0.1:54321",
+    },
     url: "http://127.0.0.1:4173/my-personal-website/index.html",
     reuseExistingServer: !process.env.CI,
   },
