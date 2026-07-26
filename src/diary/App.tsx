@@ -14,6 +14,7 @@ type AuthState =
   | "signed-out"
   | "link-sent"
   | "verifying"
+  | "unavailable"
   | "authenticated";
 
 const healthCopy: Record<HealthState, string> = {
@@ -36,6 +37,7 @@ export function App() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [verificationAttempt, setVerificationAttempt] = useState(0);
   const supabase = useMemo<SupabaseClient>(
     () => createDiarySupabaseClient(),
     [],
@@ -78,29 +80,51 @@ export function App() {
     }
 
     const controller = new AbortController();
+    let isCurrentRequest = true;
+    const checkedAccessToken = session.access_token;
+    setError(null);
     setAuthState("verifying");
     void checkProtectedOwnerAccess(
-      session.access_token,
+      checkedAccessToken,
       controller.signal,
     ).then(async (access) => {
+      if (!isCurrentRequest) {
+        return;
+      }
       if (access.state === "ready") {
         setError(null);
         setAuthState("authenticated");
         return;
       }
       if (access.state === "unauthorized") {
-        await supabase.auth.signOut({ scope: "local" });
+        const { data } = await supabase.auth.getSession();
+        if (
+          !isCurrentRequest ||
+          data.session?.access_token !== checkedAccessToken
+        ) {
+          return;
+        }
         setError("Your session expired or is not authorized for Diary.");
         setAuthState("signed-out");
+        await supabase.auth.signOut({ scope: "local" });
         return;
       }
 
-      setError("Diary could not verify protected access. Try again shortly.");
-      setAuthState("signed-out");
+      setError(
+        "Diary authentication is temporarily unavailable. Your session is still saved.",
+      );
+      setAuthState("unavailable");
     });
 
-    return () => controller.abort();
-  }, [session, supabase]);
+    return () => {
+      isCurrentRequest = false;
+      controller.abort();
+    };
+  }, [session, supabase, verificationAttempt]);
+
+  function retryProtectedAccess() {
+    setVerificationAttempt((current) => current + 1);
+  }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -154,6 +178,30 @@ export function App() {
             <button className="diary-secondary-action" onClick={signOut}>
               Sign out
             </button>
+          </>
+        ) : session ? (
+          <>
+            <h2>Diary access</h2>
+            <p className="diary-intro">
+              Your saved owner session is being verified.
+            </p>
+            <p
+              className={`diary-health diary-health--${health}`}
+              role="status"
+            >
+              <span aria-hidden="true" />
+              {authState === "unavailable"
+                ? "Protected Diary access is temporarily unavailable."
+                : "Verifying protected Diary access…"}
+            </p>
+            {authState === "unavailable" ? (
+              <button
+                className="diary-secondary-action"
+                onClick={retryProtectedAccess}
+              >
+                Retry protected access
+              </button>
+            ) : null}
           </>
         ) : (
           <>
