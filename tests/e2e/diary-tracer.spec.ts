@@ -521,9 +521,14 @@ test("authenticated owner captures an Entry without losing the reading position"
     page.getByRole("heading", { name: "Today" }),
   ).toBeVisible();
   await expect(page.getByText("Existing Entry 7", { exact: false })).toBeVisible();
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  const readingPosition = await page.evaluate(() => window.scrollY);
-  expect(readingPosition).toBeGreaterThan(100);
+  const readingEntry = page.locator("#entry-entry-6");
+  await readingEntry.evaluate((entry) => {
+    entry.scrollIntoView({ block: "center" });
+  });
+  const readingEntryTop = await readingEntry.evaluate(
+    (entry) => entry.getBoundingClientRect().top,
+  );
+  expect(readingEntryTop).toBeGreaterThan(0);
 
   await page.getByRole("button", { name: "New Entry" }).click();
   await expect(
@@ -546,8 +551,12 @@ test("authenticated owner captures an Entry without losing the reading position"
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+08:00$/,
   );
   await expect
-    .poll(() => page.evaluate(() => window.scrollY))
-    .toBe(readingPosition);
+    .poll(async () =>
+      readingEntry.evaluate(
+        (entry) => entry.getBoundingClientRect().top,
+      ),
+    )
+    .toBeCloseTo(readingEntryTop, 0);
 
   await page.getByRole("button", { name: "View new Entry" }).click();
   const savedEntry = page.locator("#entry-new-entry");
@@ -560,6 +569,126 @@ test("authenticated owner captures an Entry without losing the reading position"
   await expect(savedEntry.getByText("AI processing pending")).toBeVisible();
   await expect(savedEntry.getByText(/Entry Time/)).toBeVisible();
   await expect(savedEntry.getByText(/Captured/)).toBeVisible();
+});
+
+test("authenticated Today rolls over at Asia Taipei midnight", async ({
+  page,
+}) => {
+  await page.clock.install({
+    time: new Date("2026-07-27T15:59:00Z"),
+  });
+  const ownerAccessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ accessToken, userId }) => {
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: accessToken,
+          expires_at: expiresAt,
+          expires_in: 3600,
+          refresh_token: "midnight-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { accessToken: ownerAccessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/v1/logout**", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+
+  let todayRequests = 0;
+  let apiToday = "2026-07-27";
+  let capturedRequest:
+    | {
+        entry_at?: string;
+        original_content?: string;
+      }
+    | undefined;
+  await page.route("**/entries**", async (route) => {
+    if (route.request().method() === "POST") {
+      capturedRequest = route.request().postDataJSON();
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          created_at: "2026-07-27T16:00:00+00:00",
+          current_revision_id: "midnight-revision",
+          entry_at: "2026-07-27T16:00:00+00:00",
+          id: "midnight-entry",
+          original_content: "First Entry after Taipei midnight.",
+          owner_date: "2026-07-28",
+          processing_state: "pending",
+          revision_number: 1,
+        },
+        status: 201,
+      });
+      return;
+    }
+
+    todayRequests += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        date: apiToday,
+        entries: [],
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html");
+  await expect(page.getByText("2026-07-27", { exact: true })).toBeVisible();
+  const requestsBeforeMidnight = todayRequests;
+  apiToday = "2026-07-28";
+
+  await page.clock.runFor("01:00");
+
+  await expect(page.getByText("2026-07-28", { exact: true })).toBeVisible();
+  expect(todayRequests).toBeGreaterThan(requestsBeforeMidnight);
+
+  await page.getByRole("button", { name: "New Entry" }).click();
+  await page
+    .getByLabel("Original Content")
+    .fill("First Entry after Taipei midnight.");
+  await page.getByRole("button", { name: "Save Entry" }).click();
+
+  expect(capturedRequest).toEqual({
+    entry_at: "2026-07-28T00:00:00+08:00",
+    original_content: "First Entry after Taipei midnight.",
+  });
+  await expect(page.locator("#entry-midnight-entry")).toBeVisible();
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Sign in to Diary" }),
+  ).toBeVisible();
+  const requestsAfterUnmount = todayRequests;
+
+  await page.clock.runFor("24:00:00");
+
+  expect(todayRequests).toBe(requestsAfterUnmount);
 });
 
 test("mobile backdated capture stays outside Today but remains viewable", async ({

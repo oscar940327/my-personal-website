@@ -15,8 +15,13 @@ type EntryExperienceProps = {
   onSignOut: () => Promise<void>;
 };
 
-function taipeiDateTimeInputValue(now = new Date()): string {
-  const values = Object.fromEntries(
+type ReadingAnchor = {
+  elementId: string;
+  viewportTop: number;
+};
+
+function taipeiDateTimeParts(now: Date): Record<string, string> {
+  return Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
       day: "2-digit",
       hour: "2-digit",
@@ -30,10 +35,27 @@ function taipeiDateTimeInputValue(now = new Date()): string {
       .filter(({ type }) => type !== "literal")
       .map(({ type, value }) => [type, value]),
   );
+}
+
+function taipeiDateTimeInputValue(now = new Date()): string {
+  const values = taipeiDateTimeParts(now);
   return (
     `${values.year}-${values.month}-${values.day}` +
     `T${values.hour}:${values.minute}`
   );
+}
+
+function millisecondsUntilNextTaipeiMidnight(now = new Date()): number {
+  const values = taipeiDateTimeParts(now);
+  const nextMidnight = (
+    Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day) + 1,
+    ) -
+    8 * 60 * 60 * 1000
+  );
+  return Math.max(1, nextMidnight - now.getTime());
 }
 
 function asTaipeiIso(inputValue: string): string {
@@ -89,32 +111,71 @@ export function EntryExperience({
   const [savedEntryPreviewOpen, setSavedEntryPreviewOpen] = useState(false);
   const idempotencyKey = useRef("");
   const preservedScrollPosition = useRef(0);
+  const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
     let current = true;
-    void loadTodayEntries(accessToken, controller.signal)
-      .then((group) => {
+    let controller: AbortController | null = null;
+    let midnightTimer: number | null = null;
+
+    function scheduleMidnightRefresh() {
+      if (!current) {
+        return;
+      }
+      midnightTimer = window.setTimeout(() => {
+        void refreshToday();
+      }, millisecondsUntilNextTaipeiMidnight());
+    }
+
+    async function refreshToday() {
+      controller?.abort();
+      controller = new AbortController();
+      try {
+        const group = await loadTodayEntries(
+          accessToken,
+          controller.signal,
+        );
         if (!current) {
           return;
         }
         setDate(group.date);
         setEntries(group.entries);
         setHistoryState("ready");
-      })
-      .catch(() => {
+      } catch {
         if (current) {
           setHistoryState("unavailable");
         }
-      });
+      } finally {
+        scheduleMidnightRefresh();
+      }
+    }
+
+    void refreshToday();
     return () => {
       current = false;
-      controller.abort();
+      controller?.abort();
+      if (midnightTimer !== null) {
+        window.clearTimeout(midnightTimer);
+      }
     };
   }, [accessToken]);
 
   function openComposer() {
     preservedScrollPosition.current = window.scrollY;
+    const visibleEntry = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        ".diary-entry-list .diary-entry",
+      ),
+    ).find((entry) => {
+      const bounds = entry.getBoundingClientRect();
+      return bounds.bottom > 0 && bounds.top < window.innerHeight;
+    });
+    preservedReadingAnchor.current = visibleEntry
+      ? {
+          elementId: visibleEntry.id,
+          viewportTop: visibleEntry.getBoundingClientRect().top,
+        }
+      : null;
     idempotencyKey.current = crypto.randomUUID();
     setContent("");
     setEntryTime(taipeiDateTimeInputValue());
@@ -127,6 +188,19 @@ export function EntryExperience({
       return;
     }
     setComposerOpen(false);
+    restoreReadingPosition();
+  }
+
+  function restoreReadingPosition() {
+    const anchor = preservedReadingAnchor.current;
+    const anchorElement = anchor
+      ? document.getElementById(anchor.elementId)
+      : null;
+    if (anchor && anchorElement) {
+      const currentTop = anchorElement.getBoundingClientRect().top;
+      window.scrollBy({ top: currentTop - anchor.viewportTop });
+      return;
+    }
     window.scrollTo({ top: preservedScrollPosition.current });
   }
 
@@ -157,7 +231,7 @@ export function EntryExperience({
       setSavedEntry(captured);
       setComposerOpen(false);
       requestAnimationFrame(() => {
-        window.scrollTo({ top: preservedScrollPosition.current });
+        restoreReadingPosition();
       });
     } catch {
       setCaptureError(
