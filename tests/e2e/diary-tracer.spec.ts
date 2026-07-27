@@ -423,3 +423,248 @@ test("a stale protected-access denial cannot sign out a newer session", async ({
     )
     .toBe(newAccessToken);
 });
+
+test("authenticated owner captures an Entry without losing the reading position", async ({
+  page,
+}) => {
+  const ownerAccessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ accessToken, userId }) => {
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: accessToken,
+          expires_at: expiresAt,
+          expires_in: 3600,
+          refresh_token: "capture-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { accessToken: ownerAccessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+
+  const existingEntries = Array.from({ length: 8 }, (_, index) => ({
+    created_at: `2026-07-27T0${index}:00:00+00:00`,
+    current_revision_id: `revision-${index}`,
+    entry_at: `2026-07-27T0${index}:00:00+00:00`,
+    id: `entry-${index}`,
+    original_content: `Existing Entry ${index}\n${"閱讀位置。".repeat(30)}`,
+    owner_date: "2026-07-27",
+    processing_state: "pending",
+    revision_number: 1,
+  }));
+  const capturedEntry = {
+    created_at: "2026-07-27T05:30:10+00:00",
+    current_revision_id: "new-revision",
+    entry_at: "2026-07-27T05:30:00+00:00",
+    id: "new-entry",
+    original_content:
+      "完成 API 串接。\n保留這一整段 Original Content。",
+    owner_date: "2026-07-27",
+    processing_state: "pending",
+    revision_number: 1,
+  };
+  let capturedRequest:
+    | {
+        entry_at?: string;
+        original_content?: string;
+      }
+    | undefined;
+  let idempotencyKey: string | null = null;
+  await page.route("**/entries**", async (route) => {
+    if (route.request().method() === "POST") {
+      capturedRequest = route.request().postDataJSON();
+      idempotencyKey =
+        route.request().headers()["x-idempotency-key"] ?? null;
+      await route.fulfill({
+        contentType: "application/json",
+        json: capturedEntry,
+        status: 201,
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        date: "2026-07-27",
+        entries: existingEntries,
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html");
+  await expect(
+    page.getByRole("heading", { name: "Today" }),
+  ).toBeVisible();
+  await expect(page.getByText("Existing Entry 7", { exact: false })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const readingPosition = await page.evaluate(() => window.scrollY);
+  expect(readingPosition).toBeGreaterThan(100);
+
+  await page.getByRole("button", { name: "New Entry" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "New Entry" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Original Content")).toBeFocused();
+  await page
+    .getByLabel("Original Content")
+    .fill("完成 API 串接。\n保留這一整段 Original Content。");
+  await page.getByLabel("Original Content").press("Control+Enter");
+
+  await expect(
+    page.getByRole("button", { name: "View new Entry" }),
+  ).toBeVisible();
+  expect(idempotencyKey).toBeTruthy();
+  expect(capturedRequest?.original_content).toBe(
+    "完成 API 串接。\n保留這一整段 Original Content。",
+  );
+  expect(capturedRequest?.entry_at).toMatch(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+08:00$/,
+  );
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBe(readingPosition);
+
+  await page.getByRole("button", { name: "View new Entry" }).click();
+  const savedEntry = page.locator("#entry-new-entry");
+  await expect(
+    savedEntry.getByText(
+      "完成 API 串接。\n保留這一整段 Original Content。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(savedEntry.getByText("AI processing pending")).toBeVisible();
+  await expect(savedEntry.getByText(/Entry Time/)).toBeVisible();
+  await expect(savedEntry.getByText(/Captured/)).toBeVisible();
+});
+
+test("mobile backdated capture stays outside Today but remains viewable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const ownerAccessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ accessToken, userId }) => {
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: accessToken,
+          expires_at: expiresAt,
+          expires_in: 3600,
+          refresh_token: "mobile-capture-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { accessToken: ownerAccessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+  let capturedRequest:
+    | {
+        entry_at?: string;
+        original_content?: string;
+      }
+    | undefined;
+  await page.route("**/entries**", async (route) => {
+    if (route.request().method() === "POST") {
+      capturedRequest = route.request().postDataJSON();
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          created_at: "2026-07-27T05:30:10+00:00",
+          current_revision_id: "mobile-backdated-revision",
+          entry_at: "2026-07-24T15:30:00+00:00",
+          id: "mobile-backdated-entry",
+          original_content: "補記手機上的面試準備。",
+          owner_date: "2026-07-24",
+          processing_state: "pending",
+          revision_number: 1,
+        },
+        status: 201,
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: { date: "2026-07-27", entries: [] },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html");
+  await expect(page.getByText("2026-07-27", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "New Entry" }).click();
+  const composer = page.getByRole("dialog", { name: "New Entry" });
+  await expect(composer).toBeVisible();
+  const composerBox = await composer.boundingBox();
+  expect(composerBox).not.toBeNull();
+  expect(composerBox?.x).toBeGreaterThanOrEqual(0);
+  expect((composerBox?.x ?? 0) + (composerBox?.width ?? 0)).toBeLessThanOrEqual(
+    390,
+  );
+
+  await page.getByLabel("Original Content").fill("補記手機上的面試準備。");
+  await page.getByLabel("Entry Time").fill("2026-07-24T23:30");
+  await page.getByRole("button", { name: "Save Entry" }).click();
+
+  expect(capturedRequest).toEqual({
+    entry_at: "2026-07-24T23:30:00+08:00",
+    original_content: "補記手機上的面試準備。",
+  });
+  await expect(page.getByText("2026-07-27", { exact: true })).toBeVisible();
+  await expect(
+    page.locator("#entry-mobile-backdated-entry"),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "View new Entry" }).click();
+  const savedEntryDialog = page.getByRole("dialog", {
+    name: "Saved Entry",
+  });
+  await expect(savedEntryDialog).toContainText("補記手機上的面試準備。");
+  await expect(savedEntryDialog).toContainText("AI processing pending");
+});

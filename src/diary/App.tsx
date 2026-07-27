@@ -7,6 +7,7 @@ import {
   checkProtectedOwnerAccess,
   type HealthState,
 } from "./api";
+import { EntryExperience } from "./EntryExperience";
 import { createDiarySupabaseClient } from "./supabase";
 
 type AuthState =
@@ -166,19 +167,11 @@ export function App() {
         <p className="diary-kicker">Personal memory, kept over time</p>
         <h1 id="diary-title">Diary</h1>
 
-        {authState === "authenticated" ? (
-          <>
-            <p className="diary-intro">
-              Your private Diary shell is protected and ready for Entries.
-            </p>
-            <p className="diary-health diary-health--ready" role="status">
-              <span aria-hidden="true" />
-              Authenticated Diary is ready.
-            </p>
-            <button className="diary-secondary-action" onClick={signOut}>
-              Sign out
-            </button>
-          </>
+        {authState === "authenticated" && session ? (
+          <EntryExperience
+            accessToken={session.access_token}
+            onSignOut={signOut}
+          />
         ) : session ? (
           <>
             <h2>Diary access</h2>
