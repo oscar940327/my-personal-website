@@ -686,7 +686,7 @@ test("authenticated Today rolls over at Asia Taipei midnight", async ({
   ).toBeVisible();
   const requestsAfterUnmount = todayRequests;
 
-  await page.clock.runFor("24:00:00");
+  await page.clock.fastForward("24:00:00");
 
   expect(todayRequests).toBe(requestsAfterUnmount);
 });
