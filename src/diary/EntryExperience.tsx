@@ -88,11 +88,55 @@ function flattenGroups(groups: EntryDateGroup[]): EntryRecord[] {
   return groups.flatMap((group) => group.entries);
 }
 
+function timestampMicroseconds(isoValue: string): bigint {
+  const match = isoValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/,
+  );
+  if (!match) {
+    throw new Error("Entry Time is not a supported ISO timestamp");
+  }
+  const [
+    ,
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    fraction = "",
+    offset,
+  ] = match;
+  const offsetMinutes =
+    offset === "Z"
+      ? 0
+      : (
+          Number(offset.slice(1, 3)) * 60 +
+          Number(offset.slice(4, 6))
+        ) * (offset.startsWith("+") ? 1 : -1);
+  const utcMilliseconds =
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+    ) -
+    offsetMinutes * 60_000;
+  return (
+    BigInt(utcMilliseconds) * 1_000n +
+    BigInt(fraction.padEnd(6, "0"))
+  );
+}
+
 function sortEntries(entries: EntryRecord[]): EntryRecord[] {
   return [...entries].sort((left, right) => {
-    const entryTimeOrder =
-      Date.parse(right.entry_at) - Date.parse(left.entry_at);
-    return entryTimeOrder || right.id.localeCompare(left.id);
+    const leftEntryTime = timestampMicroseconds(left.entry_at);
+    const rightEntryTime = timestampMicroseconds(right.entry_at);
+    if (leftEntryTime !== rightEntryTime) {
+      return leftEntryTime > rightEntryTime ? -1 : 1;
+    }
+    return right.id.localeCompare(left.id);
   });
 }
 

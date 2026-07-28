@@ -373,3 +373,83 @@ test("scrolling near the older boundary incrementally reveals older history", as
   ).toBeVisible();
   expect(olderRequests).toBe(1);
 });
+
+test("distinct Entry Times within one millisecond keep full precision", async ({
+  page,
+}) => {
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: expiresAt,
+          expires_in: 3600,
+          refresh_token: "microsecond-history-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-29",
+        groups: [
+          {
+            date: "2026-07-29",
+            entries: [
+              entry(
+                "00000000-0000-0000-0000-000000000001",
+                "2026-07-29",
+                "2026-07-29T04:00:00.000900Z",
+                "Newer microsecond Entry.",
+              ),
+              entry(
+                "ffffffff-ffff-ffff-ffff-ffffffffffff",
+                "2026-07-29",
+                "2026-07-29T04:00:00.000100Z",
+                "Older microsecond Entry.",
+              ),
+            ],
+          },
+        ],
+        newer_cursor: null,
+        older_cursor: null,
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html?date=2026-07-29");
+
+  await expect(page.locator(".diary-entry__content")).toHaveText([
+    "Newer microsecond Entry.",
+    "Older microsecond Entry.",
+  ]);
+});
