@@ -2,12 +2,19 @@ import type {
   FormEvent,
   KeyboardEvent,
 } from "react";
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   createEntry,
+  type EntryDateGroup,
   type EntryRecord,
-  loadTodayEntries,
+  type HistoryDirection,
+  loadHistoryEntries,
 } from "./api";
 
 type EntryExperienceProps = {
@@ -70,6 +77,83 @@ function formatTaipei(isoValue: string): string {
   }).format(new Date(isoValue));
 }
 
+function historyAnchorFromLocation(): string | undefined {
+  const value = new URLSearchParams(window.location.search).get("date");
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value
+    : undefined;
+}
+
+function flattenGroups(groups: EntryDateGroup[]): EntryRecord[] {
+  return groups.flatMap((group) => group.entries);
+}
+
+function sortEntries(entries: EntryRecord[]): EntryRecord[] {
+  return [...entries].sort((left, right) => {
+    const entryTimeOrder =
+      Date.parse(right.entry_at) - Date.parse(left.entry_at);
+    return entryTimeOrder || right.id.localeCompare(left.id);
+  });
+}
+
+function mergeEntries(
+  current: EntryRecord[],
+  incoming: EntryRecord[],
+): EntryRecord[] {
+  const entriesById = new Map(
+    current.map((entry) => [entry.id, entry]),
+  );
+  for (const entry of incoming) {
+    entriesById.set(entry.id, entry);
+  }
+  return sortEntries([...entriesById.values()]);
+}
+
+function groupEntries(entries: EntryRecord[]): EntryDateGroup[] {
+  const groups: EntryDateGroup[] = [];
+  for (const entry of entries) {
+    const currentGroup = groups.at(-1);
+    if (!currentGroup || currentGroup.date !== entry.owner_date) {
+      groups.push({
+        date: entry.owner_date,
+        entries: [entry],
+      });
+      continue;
+    }
+    currentGroup.entries.push(entry);
+  }
+  return groups;
+}
+
+function captureReadingAnchor(): ReadingAnchor | null {
+  const visibleEntry = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      ".diary-entry-list .diary-entry",
+    ),
+  ).find((entry) => {
+    const bounds = entry.getBoundingClientRect();
+    return bounds.bottom > 0 && bounds.top < window.innerHeight;
+  });
+  return visibleEntry
+    ? {
+        elementId: visibleEntry.id,
+        viewportTop: visibleEntry.getBoundingClientRect().top,
+      }
+    : null;
+}
+
+function restoreReadingAnchor(anchor: ReadingAnchor | null): boolean {
+  const anchorElement = anchor
+    ? document.getElementById(anchor.elementId)
+    : null;
+  if (!anchor || !anchorElement) {
+    return false;
+  }
+  const currentTop = anchorElement.getBoundingClientRect().top;
+  window.scrollBy({ top: currentTop - anchor.viewportTop });
+  return true;
+}
+
 function EntryCard({ entry }: { entry: EntryRecord }) {
   return (
     <article className="diary-entry" id={`entry-${entry.id}`}>
@@ -95,11 +179,19 @@ export function EntryExperience({
   accessToken,
   onSignOut,
 }: EntryExperienceProps) {
-  const [date, setDate] = useState("");
+  const requestedAnchorDate = useRef(historyAnchorFromLocation());
+  const usesTodayAnchor = requestedAnchorDate.current === undefined;
+  const [anchorDate, setAnchorDate] = useState("");
   const [entries, setEntries] = useState<EntryRecord[]>([]);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
+  const [newerCursor, setNewerCursor] = useState<string | null>(null);
   const [historyState, setHistoryState] = useState<
     "loading" | "ready" | "unavailable"
   >("loading");
+  const [adjacentLoad, setAdjacentLoad] = useState<
+    HistoryDirection | null
+  >(null);
+  const [adjacentError, setAdjacentError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState("");
   const [entryTime, setEntryTime] = useState("");
@@ -112,6 +204,17 @@ export function EntryExperience({
   const idempotencyKey = useRef("");
   const preservedScrollPosition = useRef(0);
   const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
+  const pendingHistoryAnchor = useRef<ReadingAnchor | null>(null);
+  const newerBoundary = useRef<HTMLDivElement>(null);
+  const olderBoundary = useRef<HTMLDivElement>(null);
+  const userScrolledHistory = useRef(false);
+
+  useLayoutEffect(() => {
+    if (pendingHistoryAnchor.current) {
+      restoreReadingAnchor(pendingHistoryAnchor.current);
+      pendingHistoryAnchor.current = null;
+    }
+  }, [entries]);
 
   useEffect(() => {
     let current = true;
@@ -119,27 +222,32 @@ export function EntryExperience({
     let midnightTimer: number | null = null;
 
     function scheduleMidnightRefresh() {
-      if (!current) {
+      if (!current || !usesTodayAnchor) {
         return;
       }
       midnightTimer = window.setTimeout(() => {
-        void refreshToday();
+        void refreshHistory();
       }, millisecondsUntilNextTaipeiMidnight());
     }
 
-    async function refreshToday() {
+    async function refreshHistory() {
       controller?.abort();
       controller = new AbortController();
       try {
-        const group = await loadTodayEntries(
+        const page = await loadHistoryEntries(
           accessToken,
+          {
+            anchorDate: requestedAnchorDate.current,
+          },
           controller.signal,
         );
         if (!current) {
           return;
         }
-        setDate(group.date);
-        setEntries(group.entries);
+        setAnchorDate(page.anchor_date);
+        setEntries(sortEntries(flattenGroups(page.groups)));
+        setOlderCursor(page.older_cursor);
+        setNewerCursor(page.newer_cursor);
         setHistoryState("ready");
       } catch {
         if (current) {
@@ -150,7 +258,7 @@ export function EntryExperience({
       }
     }
 
-    void refreshToday();
+    void refreshHistory();
     return () => {
       current = false;
       controller?.abort();
@@ -158,24 +266,117 @@ export function EntryExperience({
         window.clearTimeout(midnightTimer);
       }
     };
-  }, [accessToken]);
+  }, [accessToken, usesTodayAnchor]);
+
+  useEffect(() => {
+    function markUserScrollIntent() {
+      userScrolledHistory.current = true;
+    }
+    function markKeyboardScrollIntent(event: globalThis.KeyboardEvent) {
+      if (
+        [
+          "ArrowDown",
+          "ArrowUp",
+          "End",
+          "Home",
+          "PageDown",
+          "PageUp",
+          " ",
+        ].includes(event.key)
+      ) {
+        markUserScrollIntent();
+      }
+    }
+    window.addEventListener("wheel", markUserScrollIntent, {
+      passive: true,
+    });
+    window.addEventListener("touchmove", markUserScrollIntent, {
+      passive: true,
+    });
+    window.addEventListener("keydown", markKeyboardScrollIntent);
+    return () => {
+      window.removeEventListener("wheel", markUserScrollIntent);
+      window.removeEventListener("touchmove", markUserScrollIntent);
+      window.removeEventListener("keydown", markKeyboardScrollIntent);
+    };
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (observations) => {
+        if (
+          !userScrolledHistory.current ||
+          adjacentLoad !== null
+        ) {
+          return;
+        }
+        const visibleBoundary = observations.find(
+          (observation) => observation.isIntersecting,
+        )?.target;
+        const direction =
+          visibleBoundary === olderBoundary.current && olderCursor
+            ? "older"
+            : visibleBoundary === newerBoundary.current && newerCursor
+              ? "newer"
+              : null;
+        if (direction) {
+          userScrolledHistory.current = false;
+          void loadAdjacentHistory(direction);
+        }
+      },
+      {
+        rootMargin: "192px 0px",
+      },
+    );
+    if (newerBoundary.current) {
+      observer.observe(newerBoundary.current);
+    }
+    if (olderBoundary.current) {
+      observer.observe(olderBoundary.current);
+    }
+    return () => observer.disconnect();
+  }, [adjacentLoad, newerCursor, olderCursor]);
+
+  async function loadAdjacentHistory(direction: HistoryDirection) {
+    const cursor = direction === "older" ? olderCursor : newerCursor;
+    if (!cursor || adjacentLoad !== null) {
+      return;
+    }
+
+    pendingHistoryAnchor.current = captureReadingAnchor();
+    setAdjacentError(null);
+    setAdjacentLoad(direction);
+    const controller = new AbortController();
+    try {
+      const page = await loadHistoryEntries(
+        accessToken,
+        {
+          cursor,
+          direction,
+        },
+        controller.signal,
+      );
+      setEntries((current) =>
+        mergeEntries(current, flattenGroups(page.groups))
+      );
+      if (direction === "older") {
+        setOlderCursor(page.older_cursor);
+      } else {
+        setNewerCursor(page.newer_cursor);
+      }
+    } catch {
+      pendingHistoryAnchor.current = null;
+      setAdjacentError(
+        `Diary could not load ${direction} Entries. Try again.`,
+      );
+    } finally {
+      setAdjacentLoad(null);
+    }
+  }
 
   function openComposer() {
     preservedScrollPosition.current = window.scrollY;
-    const visibleEntry = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        ".diary-entry-list .diary-entry",
-      ),
-    ).find((entry) => {
-      const bounds = entry.getBoundingClientRect();
-      return bounds.bottom > 0 && bounds.top < window.innerHeight;
-    });
-    preservedReadingAnchor.current = visibleEntry
-      ? {
-          elementId: visibleEntry.id,
-          viewportTop: visibleEntry.getBoundingClientRect().top,
-        }
-      : null;
+    preservedReadingAnchor.current = captureReadingAnchor();
     idempotencyKey.current = crypto.randomUUID();
     setContent("");
     setEntryTime(taipeiDateTimeInputValue());
@@ -192,13 +393,7 @@ export function EntryExperience({
   }
 
   function restoreReadingPosition() {
-    const anchor = preservedReadingAnchor.current;
-    const anchorElement = anchor
-      ? document.getElementById(anchor.elementId)
-      : null;
-    if (anchor && anchorElement) {
-      const currentTop = anchorElement.getBoundingClientRect().top;
-      window.scrollBy({ top: currentTop - anchor.viewportTop });
+    if (restoreReadingAnchor(preservedReadingAnchor.current)) {
       return;
     }
     window.scrollTo({ top: preservedScrollPosition.current });
@@ -222,11 +417,14 @@ export function EntryExperience({
         },
         idempotencyKey.current,
       );
-      if (captured.owner_date === date) {
-        setEntries((current) => [
-          captured,
-          ...current.filter((entry) => entry.id !== captured.id),
-        ]);
+      const loadedDates = new Set(
+        entries.map((entry) => entry.owner_date),
+      );
+      if (
+        captured.owner_date === anchorDate ||
+        loadedDates.has(captured.owner_date)
+      ) {
+        setEntries((current) => mergeEntries(current, [captured]));
       }
       setSavedEntry(captured);
       setComposerOpen(false);
@@ -268,6 +466,16 @@ export function EntryExperience({
     setSavedEntryPreviewOpen(true);
   }
 
+  const groups = groupEntries(entries);
+  const displayedGroups =
+    groups.length === 0 && anchorDate
+      ? [{ date: anchorDate, entries: [] }]
+      : usesTodayAnchor &&
+          anchorDate &&
+          !groups.some((group) => group.date === anchorDate)
+        ? [{ date: anchorDate, entries: [] }, ...groups]
+      : groups;
+
   return (
     <>
       <div className="diary-app-header">
@@ -282,32 +490,96 @@ export function EntryExperience({
         </button>
       </div>
 
-      <section className="diary-today" aria-labelledby="diary-today-title">
-        <div className="diary-today__heading">
+      <section className="diary-history" aria-labelledby="diary-history-title">
+        <div className="diary-history__heading">
           <div>
             <p className="diary-kicker">Asia/Taipei</p>
-            <h2 id="diary-today-title">Today</h2>
+            <h2 id="diary-history-title">History</h2>
           </div>
-          {date ? <time dateTime={date}>{date}</time> : null}
         </div>
 
+        {newerCursor ? (
+          <div
+            className="diary-history-boundary diary-history-boundary--newer"
+            ref={newerBoundary}
+          >
+            <button
+              className="diary-secondary-action"
+              disabled={adjacentLoad !== null}
+              onClick={() => void loadAdjacentHistory("newer")}
+              type="button"
+            >
+              {adjacentLoad === "newer"
+                ? "Loading newer Entries…"
+                : "Load newer Entries"}
+            </button>
+          </div>
+        ) : null}
+
         {historyState === "loading" ? (
-          <p role="status">Loading today&apos;s Entries…</p>
+          <p role="status">Loading Diary history…</p>
         ) : historyState === "unavailable" ? (
           <p className="diary-auth-error" role="alert">
-            Diary could not load today&apos;s Entries.
-          </p>
-        ) : entries.length === 0 ? (
-          <p className="diary-empty">
-            No Entries yet today. Capture whatever is on your mind.
+            Diary could not load history.
           </p>
         ) : (
-          <div className="diary-entry-list">
-            {entries.map((entry) => (
-              <EntryCard entry={entry} key={entry.id} />
-            ))}
+          <div className="diary-history-groups">
+            {displayedGroups.map((group) => {
+              const isToday =
+                usesTodayAnchor && group.date === anchorDate;
+              const headingId = `diary-date-${group.date}`;
+              return (
+                <section
+                  aria-labelledby={headingId}
+                  className="diary-date-group"
+                  key={group.date}
+                >
+                  <div className="diary-date-group__heading">
+                    <h3 id={headingId}>
+                      {isToday ? "Today" : group.date}
+                    </h3>
+                    <time dateTime={group.date}>{group.date}</time>
+                  </div>
+                  {group.entries.length === 0 ? (
+                    <p className="diary-empty">
+                      No Entries at or before this date. Capture whatever is
+                      on your mind.
+                    </p>
+                  ) : (
+                    <div className="diary-entry-list">
+                      {group.entries.map((entry) => (
+                        <EntryCard entry={entry} key={entry.id} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
+
+        {olderCursor ? (
+          <div
+            className="diary-history-boundary diary-history-boundary--older"
+            ref={olderBoundary}
+          >
+            <button
+              className="diary-secondary-action"
+              disabled={adjacentLoad !== null}
+              onClick={() => void loadAdjacentHistory("older")}
+              type="button"
+            >
+              {adjacentLoad === "older"
+                ? "Loading older Entries…"
+                : "Load older Entries"}
+            </button>
+          </div>
+        ) : null}
+        {adjacentError ? (
+          <p className="diary-auth-error" role="alert">
+            {adjacentError}
+          </p>
+        ) : null}
       </section>
 
       <button className="diary-capture-action" onClick={openComposer}>

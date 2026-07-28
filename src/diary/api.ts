@@ -97,6 +97,58 @@ export type EntryDateGroup = {
   entries: EntryRecord[];
 };
 
+export type HistoryDirection = "older" | "newer";
+
+export type HistoryPage = {
+  anchor_date: string;
+  groups: EntryDateGroup[];
+  newer_cursor: string | null;
+  older_cursor: string | null;
+};
+
+export async function loadHistoryEntries(
+  accessToken: string,
+  input: {
+    anchorDate?: string;
+    cursor?: string;
+    direction?: HistoryDirection;
+    limit?: number;
+  },
+  signal: AbortSignal,
+): Promise<HistoryPage> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const parameters = new URLSearchParams();
+  if (input.anchorDate) {
+    parameters.set("anchor_date", input.anchorDate);
+  }
+  if (input.cursor) {
+    parameters.set("cursor", input.cursor);
+  }
+  if (input.direction) {
+    parameters.set("direction", input.direction);
+  }
+  if (input.limit) {
+    parameters.set("limit", String(input.limit));
+  }
+  const query = parameters.toString();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/history${
+      query ? `?${query}` : ""
+    }`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not load history");
+  }
+  return (await response.json()) as HistoryPage;
+}
+
 export async function loadTodayEntries(
   accessToken: string,
   signal: AbortSignal,

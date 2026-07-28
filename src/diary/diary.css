@@ -153,7 +153,8 @@ body {
 }
 
 .diary-app-header,
-.diary-today__heading,
+.diary-history__heading,
+.diary-date-group__heading,
 .diary-composer__heading,
 .diary-composer__actions {
   display: flex;
@@ -166,24 +167,72 @@ body {
   margin-top: 2.5rem;
 }
 
-.diary-today {
+.diary-history {
   margin-top: 4rem;
 }
 
-.diary-today__heading {
+.diary-history__heading {
   align-items: end;
   padding-bottom: 1.25rem;
   border-bottom: 1px solid rgb(47 47 47 / 18%);
 }
 
-.diary-today__heading h2,
+.diary-history__heading h2,
 .diary-composer__heading h2 {
   margin-top: 0;
 }
 
-.diary-today__heading time {
+.diary-history__heading p {
+  margin: 0;
   color: #5f5d56;
   font: 0.85rem "DM Mono", monospace;
+}
+
+.diary-history__heading time,
+.diary-date-group__heading time {
+  color: #5f5d56;
+  font: 0.85rem "DM Mono", monospace;
+}
+
+.diary-history-groups {
+  display: grid;
+  gap: 3.5rem;
+  margin-top: 2.5rem;
+}
+
+.diary-date-group {
+  scroll-margin: 8rem;
+}
+
+.diary-date-group__heading {
+  align-items: end;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid rgb(47 47 47 / 15%);
+}
+
+.diary-date-group__heading h3 {
+  margin: 0;
+  font-family: "Poppins", sans-serif;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  font-weight: 500;
+}
+
+.diary-history-boundary {
+  min-height: 5rem;
+  display: grid;
+  place-items: center;
+}
+
+.diary-history-boundary .diary-secondary-action {
+  margin-top: 0;
+}
+
+.diary-history-boundary--newer {
+  margin-top: 1rem;
+}
+
+.diary-history-boundary--older {
+  margin-top: 2rem;
 }
 
 .diary-entry-list {

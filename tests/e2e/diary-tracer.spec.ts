@@ -509,8 +509,15 @@ test("authenticated owner captures an Entry without losing the reading position"
     await route.fulfill({
       contentType: "application/json",
       json: {
-        date: "2026-07-27",
-        entries: existingEntries,
+        anchor_date: "2026-07-27",
+        groups: [
+          {
+            date: "2026-07-27",
+            entries: existingEntries,
+          },
+        ],
+        newer_cursor: null,
+        older_cursor: null,
       },
       status: 200,
     });
@@ -651,8 +658,10 @@ test("authenticated Today rolls over at Asia Taipei midnight", async ({
     await route.fulfill({
       contentType: "application/json",
       json: {
-        date: apiToday,
-        entries: [],
+        anchor_date: apiToday,
+        groups: [],
+        newer_cursor: null,
+        older_cursor: null,
       },
       status: 200,
     });
@@ -760,7 +769,12 @@ test("mobile backdated capture stays outside Today but remains viewable", async 
     }
     await route.fulfill({
       contentType: "application/json",
-      json: { date: "2026-07-27", entries: [] },
+      json: {
+        anchor_date: "2026-07-27",
+        groups: [],
+        newer_cursor: null,
+        older_cursor: null,
+      },
       status: 200,
     });
   });
