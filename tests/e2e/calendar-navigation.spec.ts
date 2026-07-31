@@ -539,9 +539,11 @@ test("calendar jump isolates the new History from an in-flight adjacent request"
 test("Calendar updates Taipei Today across midnight without stealing a browsed month", async ({
   page,
 }) => {
+  const beforeTaipeiMidnight = new Date("2026-04-30T23:59:59+08:00");
   await page.clock.install({
-    time: new Date("2026-04-30T23:59:59+08:00"),
+    time: beforeTaipeiMidnight,
   });
+  await page.clock.pauseAt(beforeTaipeiMidnight);
   const accessToken = unsignedAccessToken(ownerId);
   await page.addInitScript(
     ({ ownerAccessToken, userId }) => {
