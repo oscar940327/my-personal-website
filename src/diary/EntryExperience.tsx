@@ -16,6 +16,7 @@ import {
   type HistoryDirection,
   loadHistoryEntries,
 } from "./api";
+import { CalendarView } from "./CalendarView";
 
 type EntryExperienceProps = {
   accessToken: string;
@@ -225,6 +226,8 @@ export function EntryExperience({
 }: EntryExperienceProps) {
   const requestedAnchorDate = useRef(historyAnchorFromLocation());
   const usesTodayAnchor = requestedAnchorDate.current === undefined;
+  const [surface, setSurface] = useState<"history" | "calendar">("history");
+  const [historyRequestVersion, setHistoryRequestVersion] = useState(0);
   const [anchorDate, setAnchorDate] = useState("");
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
@@ -310,7 +313,7 @@ export function EntryExperience({
         window.clearTimeout(midnightTimer);
       }
     };
-  }, [accessToken, usesTodayAnchor]);
+  }, [accessToken, historyRequestVersion, usesTodayAnchor]);
 
   useEffect(() => {
     function markUserScrollIntent() {
@@ -510,14 +513,22 @@ export function EntryExperience({
     setSavedEntryPreviewOpen(true);
   }
 
+  function jumpToHistoryDate(date: string) {
+    requestedAnchorDate.current = date;
+    const location = new URL(window.location.href);
+    location.searchParams.set("date", date);
+    window.history.replaceState({}, "", location);
+    setHistoryState("loading");
+    setSurface("history");
+    setHistoryRequestVersion((current) => current + 1);
+  }
+
   const groups = groupEntries(entries);
   const displayedGroups =
-    groups.length === 0 && anchorDate
-      ? [{ date: anchorDate, entries: [] }]
-      : usesTodayAnchor &&
-          anchorDate &&
-          !groups.some((group) => group.date === anchorDate)
-        ? [{ date: anchorDate, entries: [] }, ...groups]
+    anchorDate && !groups.some((group) => group.date === anchorDate)
+      ? [...groups, { date: anchorDate, entries: [] }].sort((left, right) =>
+          right.date.localeCompare(left.date)
+        )
       : groups;
 
   return (
@@ -534,6 +545,31 @@ export function EntryExperience({
         </button>
       </div>
 
+      <nav aria-label="Diary views" className="diary-view-navigation">
+        <button
+          aria-pressed={surface === "history"}
+          className="diary-secondary-action"
+          onClick={() => setSurface("history")}
+          type="button"
+        >
+          History
+        </button>
+        <button
+          aria-pressed={surface === "calendar"}
+          className="diary-secondary-action"
+          onClick={() => setSurface("calendar")}
+          type="button"
+        >
+          Calendar
+        </button>
+      </nav>
+
+      {surface === "calendar" ? (
+        <CalendarView
+          accessToken={accessToken}
+          onSelectDate={jumpToHistoryDate}
+        />
+      ) : (
       <section className="diary-history" aria-labelledby="diary-history-title">
         <div className="diary-history__heading">
           <div>
@@ -586,8 +622,9 @@ export function EntryExperience({
                   </div>
                   {group.entries.length === 0 ? (
                     <p className="diary-empty">
-                      No Entries at or before this date. Capture whatever is
-                      on your mind.
+                      {usesTodayAnchor
+                        ? "No Entries at or before this date. Capture whatever is on your mind."
+                        : "No Entries on this date. History continues with nearby Entries."}
                     </p>
                   ) : (
                     <div className="diary-entry-list">
@@ -625,6 +662,7 @@ export function EntryExperience({
           </p>
         ) : null}
       </section>
+      )}
 
       <button className="diary-capture-action" onClick={openComposer}>
         New Entry

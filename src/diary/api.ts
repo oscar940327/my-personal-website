@@ -106,6 +106,40 @@ export type HistoryPage = {
   older_cursor: string | null;
 };
 
+export type CalendarDay = {
+  date: string;
+  entry_count: number;
+};
+
+export type CalendarMonth = {
+  days: CalendarDay[];
+  month: string;
+  time_zone: "Asia/Taipei";
+};
+
+export async function loadCalendarMonth(
+  accessToken: string,
+  month: string,
+  signal: AbortSignal,
+): Promise<CalendarMonth> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const parameters = new URLSearchParams({ month });
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/calendar?${parameters}`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not load the calendar");
+  }
+  return (await response.json()) as CalendarMonth;
+}
+
 export async function loadHistoryEntries(
   accessToken: string,
   input: {
