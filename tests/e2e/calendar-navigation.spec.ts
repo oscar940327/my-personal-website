@@ -283,7 +283,21 @@ test("mobile owner selects an empty Calendar date and keeps New Entry available"
       contentType: "application/json",
       json: {
         anchor_date: selectedDate ?? "2026-04-01",
-        groups: [],
+        groups: selectedDate
+          ? [
+              {
+                date: "2026-04-01",
+                entries: [
+                  entry(
+                    "mobile-calendar-nearby",
+                    "2026-04-01",
+                    "2026-04-01T04:00:00Z",
+                    "Nearby mobile History Entry.",
+                  ),
+                ],
+              },
+            ]
+          : [],
         newer_cursor: null,
         older_cursor: null,
       },
@@ -308,4 +322,396 @@ test("mobile owner selects an empty Calendar date and keeps New Entry available"
   await expect(newEntry).toBeVisible();
   await newEntry.click();
   await expect(page.getByRole("dialog", { name: "New Entry" })).toBeVisible();
+});
+
+test("calendar jump isolates the new History from an in-flight adjacent request", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-05-01T12:00:00+08:00"));
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: "calendar-race-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/calendar**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        days: [{ date: "2026-05-10", entry_count: 1 }],
+        month: "2026-05",
+        time_zone: "Asia/Taipei",
+      },
+      status: 200,
+    });
+  });
+
+  let markOldAdjacentStarted!: () => void;
+  const oldAdjacentStarted = new Promise<void>((resolve) => {
+    markOldAdjacentStarted = resolve;
+  });
+  let releaseOldAdjacent!: () => void;
+  const oldAdjacentRelease = new Promise<void>((resolve) => {
+    releaseOldAdjacent = resolve;
+  });
+  let markOldAdjacentSettled!: () => void;
+  const oldAdjacentSettled = new Promise<void>((resolve) => {
+    markOldAdjacentSettled = resolve;
+  });
+  const historyRequests: URL[] = [];
+  await page.route("**/entries/history**", async (route) => {
+    const url = new URL(route.request().url());
+    historyRequests.push(url);
+    const cursor = url.searchParams.get("cursor");
+    const direction = url.searchParams.get("direction");
+    const anchorDate = url.searchParams.get("anchor_date");
+
+    if (cursor === "old-snapshot-newer" && direction === "newer") {
+      markOldAdjacentStarted();
+      await oldAdjacentRelease;
+      try {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-05-01",
+            groups: [
+              {
+                date: "2026-06-01",
+                entries: [
+                  entry(
+                    "stale-snapshot-entry",
+                    "2026-06-01",
+                    "2026-06-01T04:00:00Z",
+                    "Stale Entry from the old snapshot.",
+                  ),
+                ],
+              },
+            ],
+            newer_cursor: "stale-snapshot-next",
+            older_cursor: null,
+          },
+          status: 200,
+        });
+      } catch {
+        // An aborted transport is an acceptable isolation mechanism.
+      } finally {
+        markOldAdjacentSettled();
+      }
+      return;
+    }
+
+    const body =
+      anchorDate === "2026-05-10"
+        ? {
+            anchor_date: "2026-05-10",
+            groups: [
+              {
+                date: "2026-05-10",
+                entries: [
+                  entry(
+                    "new-anchor-entry",
+                    "2026-05-10",
+                    "2026-05-10T04:00:00Z",
+                    "Entry from the new Calendar anchor.",
+                  ),
+                ],
+              },
+            ],
+            newer_cursor: null,
+            older_cursor: "new-snapshot-older",
+          }
+        : cursor === "new-snapshot-older" && direction === "older"
+          ? {
+              anchor_date: "2026-05-10",
+              groups: [
+                {
+                  date: "2026-05-09",
+                  entries: [
+                    entry(
+                      "new-anchor-older-entry",
+                      "2026-05-09",
+                      "2026-05-09T04:00:00Z",
+                      "Older Entry from the new snapshot.",
+                    ),
+                  ],
+                },
+              ],
+              newer_cursor: null,
+              older_cursor: null,
+            }
+          : {
+              anchor_date: "2026-05-01",
+              groups: [
+                {
+                  date: "2026-05-01",
+                  entries: [
+                    entry(
+                      "old-anchor-entry",
+                      "2026-05-01",
+                      "2026-05-01T04:00:00Z",
+                      "Entry from the old History anchor.",
+                    ),
+                  ],
+                },
+              ],
+              newer_cursor: "old-snapshot-newer",
+              older_cursor: null,
+            };
+    await route.fulfill({
+      contentType: "application/json",
+      json: body,
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html");
+  await expect(page.getByText("Entry from the old History anchor.")).toBeVisible();
+  await page.getByRole("button", { name: "Load newer Entries" }).click();
+  await oldAdjacentStarted;
+
+  await page.getByRole("button", { name: "Calendar" }).click();
+  await page.getByRole("button", { name: "May 10, 2026, 1 Entry" }).click();
+  await expect(page).toHaveURL(/\?date=2026-05-10$/);
+  const newAnchorEntry = page.getByText("Entry from the new Calendar anchor.");
+  await expect(newAnchorEntry).toBeVisible();
+  const newAnchorTop = await newAnchorEntry.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+
+  releaseOldAdjacent();
+  await oldAdjacentSettled;
+
+  await expect(page.getByText("Stale Entry from the old snapshot.")).toHaveCount(0);
+  await expect(page.getByText("Entry from the old History anchor.")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Load newer Entries" }),
+  ).toHaveCount(0);
+  const loadOlder = page.getByRole("button", { name: "Load older Entries" });
+  await expect(loadOlder).toBeEnabled();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByText(/Loading (newer|older) Entries/)).toHaveCount(0);
+  await expect
+    .poll(async () =>
+      newAnchorEntry.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(newAnchorTop, 0);
+
+  await loadOlder.click();
+  await expect(page.getByText("Older Entry from the new snapshot.")).toBeVisible();
+  expect(
+    historyRequests.some(
+      (request) => request.searchParams.get("cursor") === "new-snapshot-older",
+    ),
+  ).toBe(true);
+});
+
+test("Calendar updates Taipei Today across midnight without stealing a browsed month", async ({
+  page,
+}) => {
+  await page.clock.install({
+    time: new Date("2026-04-30T23:59:59+08:00"),
+  });
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: "calendar-midnight-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+  const calendarMonths: Array<string | null> = [];
+  await page.route("**/entries/calendar**", async (route) => {
+    const month = new URL(route.request().url()).searchParams.get("month");
+    calendarMonths.push(month);
+    await route.fulfill({
+      contentType: "application/json",
+      json: { days: [], month, time_zone: "Asia/Taipei" },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-04-30",
+        groups: [],
+        newer_cursor: null,
+        older_cursor: null,
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html");
+  await page.getByRole("button", { name: "Calendar" }).click();
+  await expect(page.getByText("April 2026")).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", { name: "April 30, 2026, no Entries" })
+      .getByText("Today", { exact: true }),
+  ).toBeVisible();
+
+  await page.clock.runFor(2_000);
+  await expect(page.getByText("May 2026")).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", { name: "May 1, 2026, no Entries" })
+      .getByText("Today", { exact: true }),
+  ).toBeVisible();
+  expect(calendarMonths).toContain("2026-05");
+
+  await page.getByRole("button", { name: "Previous month" }).click();
+  await expect(page.getByText("April 2026")).toBeVisible();
+  await page.clock.fastForward(24 * 60 * 60 * 1_000);
+  await expect(page.getByText("April 2026")).toBeVisible();
+
+  await page.getByRole("button", { name: "Next month" }).click();
+  await expect(page.getByText("May 2026")).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", { name: "May 2, 2026, no Entries" })
+      .getByText("Today", { exact: true }),
+  ).toBeVisible();
+});
+
+test("Calendar date explains when no active History exists", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-05-15T12:00:00+08:00"));
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: "calendar-empty-history-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/calendar**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        days: [],
+        month: "2026-05",
+        time_zone: "Asia/Taipei",
+      },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    const anchorDate = new URL(route.request().url()).searchParams.get(
+      "anchor_date",
+    );
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: anchorDate ?? "2026-05-15",
+        groups: [],
+        newer_cursor: null,
+        older_cursor: null,
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html");
+  await page.getByRole("button", { name: "Calendar" }).click();
+  await page
+    .getByRole("button", { name: "May 10, 2026, no Entries" })
+    .click();
+
+  await expect(page.getByRole("heading", { name: "2026-05-10" })).toBeVisible();
+  await expect(
+    page.getByText("No active Entries yet. Capture whatever is on your mind."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("History continues with nearby Entries."),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Load (newer|older) Entries/ })).toHaveCount(0);
 });

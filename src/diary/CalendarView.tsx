@@ -1,9 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type CalendarDay,
   loadCalendarMonth,
 } from "./api";
+import {
+  millisecondsUntilNextTaipeiMidnight,
+  taipeiToday,
+} from "./ownerClock";
 
 type CalendarViewProps = {
   accessToken: string;
@@ -11,21 +21,6 @@ type CalendarViewProps = {
 };
 
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function taipeiToday(now = new Date()): string {
-  const values = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      day: "2-digit",
-      month: "2-digit",
-      timeZone: "Asia/Taipei",
-      year: "numeric",
-    })
-      .formatToParts(now)
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, value]),
-  );
-  return `${values.year}-${values.month}-${values.day}`;
-}
 
 function adjacentMonth(month: string, offset: number): string {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -69,8 +64,9 @@ export function CalendarView({
   accessToken,
   onSelectDate,
 }: CalendarViewProps) {
-  const today = taipeiToday();
+  const [today, setToday] = useState(taipeiToday);
   const [month, setMonth] = useState(today.slice(0, 7));
+  const followsTodayMonth = useRef(true);
   const [days, setDays] = useState<CalendarDay[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "unavailable">(
     "loading",
@@ -97,6 +93,41 @@ export function CalendarView({
     return () => controller.abort();
   }, [accessToken, month]);
 
+  useLayoutEffect(() => {
+    let active = true;
+    let midnightTimer: number | null = null;
+
+    function scheduleTodayRefresh() {
+      midnightTimer = window.setTimeout(() => {
+        if (!active) {
+          return;
+        }
+        const nextToday = taipeiToday();
+        setToday(nextToday);
+        if (followsTodayMonth.current) {
+          setMonth(nextToday.slice(0, 7));
+        }
+        scheduleTodayRefresh();
+      }, millisecondsUntilNextTaipeiMidnight());
+    }
+
+    scheduleTodayRefresh();
+    return () => {
+      active = false;
+      if (midnightTimer !== null) {
+        window.clearTimeout(midnightTimer);
+      }
+    };
+  }, []);
+
+  function browseAdjacentMonth(offset: number) {
+    setMonth((current) => {
+      const nextMonth = adjacentMonth(current, offset);
+      followsTodayMonth.current = nextMonth === today.slice(0, 7);
+      return nextMonth;
+    });
+  }
+
   return (
     <section className="diary-calendar" aria-labelledby="diary-calendar-title">
       <div className="diary-calendar__heading">
@@ -108,7 +139,7 @@ export function CalendarView({
           <button
             aria-label="Previous month"
             className="diary-icon-action"
-            onClick={() => setMonth((current) => adjacentMonth(current, -1))}
+            onClick={() => browseAdjacentMonth(-1)}
             type="button"
           >
             &larr;
@@ -117,7 +148,7 @@ export function CalendarView({
           <button
             aria-label="Next month"
             className="diary-icon-action"
-            onClick={() => setMonth((current) => adjacentMonth(current, 1))}
+            onClick={() => browseAdjacentMonth(1)}
             type="button"
           >
             &rarr;

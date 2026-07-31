@@ -17,6 +17,10 @@ import {
   loadHistoryEntries,
 } from "./api";
 import { CalendarView } from "./CalendarView";
+import {
+  millisecondsUntilNextTaipeiMidnight,
+  taipeiDateTimeInputValue,
+} from "./ownerClock";
 
 type EntryExperienceProps = {
   accessToken: string;
@@ -27,44 +31,6 @@ type ReadingAnchor = {
   elementId: string;
   viewportTop: number;
 };
-
-function taipeiDateTimeParts(now: Date): Record<string, string> {
-  return Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      day: "2-digit",
-      hour: "2-digit",
-      hour12: false,
-      minute: "2-digit",
-      month: "2-digit",
-      timeZone: "Asia/Taipei",
-      year: "numeric",
-    })
-      .formatToParts(now)
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, value]),
-  );
-}
-
-function taipeiDateTimeInputValue(now = new Date()): string {
-  const values = taipeiDateTimeParts(now);
-  return (
-    `${values.year}-${values.month}-${values.day}` +
-    `T${values.hour}:${values.minute}`
-  );
-}
-
-function millisecondsUntilNextTaipeiMidnight(now = new Date()): number {
-  const values = taipeiDateTimeParts(now);
-  const nextMidnight = (
-    Date.UTC(
-      Number(values.year),
-      Number(values.month) - 1,
-      Number(values.day) + 1,
-    ) -
-    8 * 60 * 60 * 1000
-  );
-  return Math.max(1, nextMidnight - now.getTime());
-}
 
 function asTaipeiIso(inputValue: string): string {
   return `${inputValue}:00+08:00`;
@@ -252,6 +218,8 @@ export function EntryExperience({
   const preservedScrollPosition = useRef(0);
   const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
   const pendingHistoryAnchor = useRef<ReadingAnchor | null>(null);
+  const adjacentController = useRef<AbortController | null>(null);
+  const historyGeneration = useRef(0);
   const newerBoundary = useRef<HTMLDivElement>(null);
   const olderBoundary = useRef<HTMLDivElement>(null);
   const userScrolledHistory = useRef(false);
@@ -386,14 +354,20 @@ export function EntryExperience({
 
   async function loadAdjacentHistory(direction: HistoryDirection) {
     const cursor = direction === "older" ? olderCursor : newerCursor;
-    if (!cursor || adjacentLoad !== null) {
+    if (
+      !cursor ||
+      adjacentLoad !== null ||
+      adjacentController.current !== null
+    ) {
       return;
     }
 
+    const generation = historyGeneration.current;
     pendingHistoryAnchor.current = captureReadingAnchor();
     setAdjacentError(null);
     setAdjacentLoad(direction);
     const controller = new AbortController();
+    adjacentController.current = controller;
     try {
       const page = await loadHistoryEntries(
         accessToken,
@@ -403,6 +377,12 @@ export function EntryExperience({
         },
         controller.signal,
       );
+      if (
+        controller.signal.aborted ||
+        generation !== historyGeneration.current
+      ) {
+        return;
+      }
       setEntries((current) =>
         mergeEntries(current, flattenGroups(page.groups))
       );
@@ -412,12 +392,23 @@ export function EntryExperience({
         setNewerCursor(page.newer_cursor);
       }
     } catch {
+      if (
+        controller.signal.aborted ||
+        generation !== historyGeneration.current
+      ) {
+        return;
+      }
       pendingHistoryAnchor.current = null;
       setAdjacentError(
         `Diary could not load ${direction} Entries. Try again.`,
       );
     } finally {
-      setAdjacentLoad(null);
+      if (adjacentController.current === controller) {
+        adjacentController.current = null;
+      }
+      if (generation === historyGeneration.current) {
+        setAdjacentLoad(null);
+      }
     }
   }
 
@@ -514,6 +505,16 @@ export function EntryExperience({
   }
 
   function jumpToHistoryDate(date: string) {
+    historyGeneration.current += 1;
+    adjacentController.current?.abort();
+    adjacentController.current = null;
+    pendingHistoryAnchor.current = null;
+    userScrolledHistory.current = false;
+    setAdjacentLoad(null);
+    setAdjacentError(null);
+    setEntries([]);
+    setOlderCursor(null);
+    setNewerCursor(null);
     requestedAnchorDate.current = date;
     const location = new URL(window.location.href);
     location.searchParams.set("date", date);
@@ -624,7 +625,11 @@ export function EntryExperience({
                     <p className="diary-empty">
                       {usesTodayAnchor
                         ? "No Entries at or before this date. Capture whatever is on your mind."
-                        : "No Entries on this date. History continues with nearby Entries."}
+                        : entries.length === 0 &&
+                            olderCursor === null &&
+                            newerCursor === null
+                          ? "No active Entries yet. Capture whatever is on your mind."
+                          : "No Entries on this date. History continues with nearby Entries."}
                     </p>
                   ) : (
                     <div className="diary-entry-list">
