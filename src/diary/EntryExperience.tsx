@@ -11,10 +11,14 @@ import {
 
 import {
   createEntry,
+  EntryEditConflict,
   type EntryDateGroup,
   type EntryRecord,
+  type EntryRevisionHistory,
   type HistoryDirection,
+  loadEntryRevisions,
   loadHistoryEntries,
+  replaceOriginalContent,
 } from "./api";
 import { CalendarView } from "./CalendarView";
 import {
@@ -165,7 +169,17 @@ function restoreReadingAnchor(anchor: ReadingAnchor | null): boolean {
   return true;
 }
 
-function EntryCard({ entry }: { entry: EntryRecord }) {
+type EntryCardProps = {
+  entry: EntryRecord;
+  onEdit: (entry: EntryRecord) => void;
+  onViewRevisions: (entry: EntryRecord) => void;
+};
+
+function EntryCard({
+  entry,
+  onEdit,
+  onViewRevisions,
+}: EntryCardProps) {
   return (
     <article className="diary-entry" id={`entry-${entry.id}`}>
       <p className="diary-entry__content">{entry.original_content}</p>
@@ -182,6 +196,29 @@ function EntryCard({ entry }: { entry: EntryRecord }) {
       <p className={`diary-processing diary-processing--${entry.processing_state}`}>
         AI processing {entry.processing_state.replace("_", " ")}
       </p>
+      <details className="diary-entry-actions">
+        <summary>Entry actions</summary>
+        <div className="diary-entry-actions__menu">
+          <button
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              onEdit(entry);
+            }}
+            type="button"
+          >
+            Edit Original Content
+          </button>
+          <button
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              onViewRevisions(entry);
+            }}
+            type="button"
+          >
+            View revision history
+          </button>
+        </div>
+      </details>
     </article>
   );
 }
@@ -214,11 +251,25 @@ export function EntryExperience({
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [savedEntry, setSavedEntry] = useState<EntryRecord | null>(null);
   const [savedEntryPreviewOpen, setSavedEntryPreviewOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<EntryRecord | null>(null);
+  const [replacementContent, setReplacementContent] = useState("");
+  const [expectedRevisionId, setExpectedRevisionId] = useState("");
+  const [editState, setEditState] = useState<"idle" | "saving">("idle");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editConflict, setEditConflict] = useState<EntryRecord | null>(null);
+  const [revisionHistoryEntry, setRevisionHistoryEntry] =
+    useState<EntryRecord | null>(null);
+  const [revisionHistory, setRevisionHistory] =
+    useState<EntryRevisionHistory | null>(null);
+  const [revisionHistoryState, setRevisionHistoryState] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
   const idempotencyKey = useRef("");
   const preservedScrollPosition = useRef(0);
   const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
   const pendingHistoryAnchor = useRef<ReadingAnchor | null>(null);
   const adjacentController = useRef<AbortController | null>(null);
+  const revisionHistoryController = useRef<AbortController | null>(null);
   const historyGeneration = useRef(0);
   const newerBoundary = useRef<HTMLDivElement>(null);
   const olderBoundary = useRef<HTMLDivElement>(null);
@@ -478,6 +529,125 @@ export function EntryExperience({
     }
   }
 
+  function openEditor(entry: EntryRecord) {
+    setEditingEntry(entry);
+    setReplacementContent(entry.original_content);
+    setExpectedRevisionId(entry.current_revision_id);
+    setEditConflict(null);
+    setEditError(null);
+  }
+
+  function closeEditor() {
+    if (editState === "saving") {
+      return;
+    }
+    setEditingEntry(null);
+    setEditConflict(null);
+    setEditError(null);
+  }
+
+  async function saveReplacement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingEntry || !replacementContent.trim()) {
+      setEditError("Original Content cannot be blank.");
+      return;
+    }
+
+    setEditState("saving");
+    setEditError(null);
+    try {
+      const edited = await replaceOriginalContent(
+        accessToken,
+        editingEntry.id,
+        {
+          expected_current_revision_id: expectedRevisionId,
+          original_content: replacementContent,
+        },
+      );
+      setEntries((current) => mergeEntries(current, [edited]));
+      setSavedEntry((current) =>
+        current?.id === edited.id ? edited : current
+      );
+      setEditingEntry(null);
+      setEditConflict(null);
+    } catch (error) {
+      if (error instanceof EntryEditConflict) {
+        setEditConflict(error.currentEntry);
+        setEntries((current) =>
+          mergeEntries(current, [error.currentEntry])
+        );
+        setSavedEntry((current) =>
+          current?.id === error.currentEntry.id
+            ? error.currentEntry
+            : current
+        );
+      } else {
+        setEditError(
+          "Diary could not save this replacement. Your text is still in the editor.",
+        );
+      }
+    } finally {
+      setEditState("idle");
+    }
+  }
+
+  function continueAfterConflict() {
+    if (!editConflict) {
+      return;
+    }
+    setEditingEntry(editConflict);
+    setExpectedRevisionId(editConflict.current_revision_id);
+    setEditConflict(null);
+    setEditError(null);
+  }
+
+  function handleEditorShortcut(
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ) {
+    if (
+      event.key === "Enter" &&
+      (event.ctrlKey || event.metaKey)
+    ) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
+  async function openRevisionHistory(entry: EntryRecord) {
+    revisionHistoryController.current?.abort();
+    const controller = new AbortController();
+    revisionHistoryController.current = controller;
+    setRevisionHistoryEntry(entry);
+    setRevisionHistory(null);
+    setRevisionHistoryState("loading");
+    try {
+      const history = await loadEntryRevisions(
+        accessToken,
+        entry.id,
+        controller.signal,
+      );
+      if (!controller.signal.aborted) {
+        setRevisionHistory(history);
+        setRevisionHistoryState("ready");
+      }
+    } catch {
+      if (!controller.signal.aborted) {
+        setRevisionHistoryState("unavailable");
+      }
+    } finally {
+      if (revisionHistoryController.current === controller) {
+        revisionHistoryController.current = null;
+      }
+    }
+  }
+
+  function closeRevisionHistory() {
+    revisionHistoryController.current?.abort();
+    revisionHistoryController.current = null;
+    setRevisionHistoryEntry(null);
+    setRevisionHistory(null);
+  }
+
   function handleComposerShortcut(
     event: KeyboardEvent<HTMLTextAreaElement>,
   ) {
@@ -634,7 +804,14 @@ export function EntryExperience({
                   ) : (
                     <div className="diary-entry-list">
                       {group.entries.map((entry) => (
-                        <EntryCard entry={entry} key={entry.id} />
+                        <EntryCard
+                          entry={entry}
+                          key={entry.id}
+                          onEdit={openEditor}
+                          onViewRevisions={(selectedEntry) =>
+                            void openRevisionHistory(selectedEntry)
+                          }
+                        />
                       ))}
                     </div>
                   )}
@@ -703,8 +880,155 @@ export function EntryExperience({
               </button>
             </div>
             <div className="diary-saved-entry-preview">
-              <EntryCard entry={savedEntry} />
+              <EntryCard
+                entry={savedEntry}
+                onEdit={openEditor}
+                onViewRevisions={(selectedEntry) =>
+                  void openRevisionHistory(selectedEntry)
+                }
+              />
             </div>
+          </section>
+        </div>
+      ) : null}
+
+      {editingEntry ? (
+        <div className="diary-composer-backdrop">
+          <section
+            aria-labelledby="diary-editor-title"
+            aria-modal="true"
+            className="diary-composer"
+            role="dialog"
+          >
+            <div className="diary-composer__heading">
+              <div>
+                <p className="diary-kicker">
+                  Editing from Revision {editingEntry.revision_number}
+                </p>
+                <h2 id="diary-editor-title">Edit Original Content</h2>
+              </div>
+              <button
+                aria-label="Close Original Content editor"
+                className="diary-icon-action"
+                onClick={closeEditor}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <form className="diary-composer__form" onSubmit={saveReplacement}>
+              <label htmlFor="diary-replacement-original-content">
+                Replacement Original Content
+              </label>
+              <textarea
+                autoFocus
+                id="diary-replacement-original-content"
+                onChange={(event) => setReplacementContent(event.target.value)}
+                onKeyDown={handleEditorShortcut}
+                rows={12}
+                value={replacementContent}
+              />
+              <p className="diary-composer__hint">
+                Saving creates a new immutable Entry Revision. Earlier content
+                remains available in revision history.
+              </p>
+              {editConflict ? (
+                <section className="diary-edit-conflict" role="alert">
+                  <h3>Newer revision found</h3>
+                  <p>
+                    Another edit saved Revision {editConflict.revision_number}
+                    while this editor was open. Your replacement remains above.
+                  </p>
+                  <p className="diary-edit-conflict__label">
+                    Current Original Content
+                  </p>
+                  <p className="diary-edit-conflict__content">
+                    {editConflict.original_content}
+                  </p>
+                  <button onClick={continueAfterConflict} type="button">
+                    Keep editing against Revision {editConflict.revision_number}
+                  </button>
+                </section>
+              ) : null}
+              {editError ? (
+                <p className="diary-auth-error" role="alert">
+                  {editError}
+                </p>
+              ) : null}
+              <div className="diary-composer__actions">
+                <button
+                  className="diary-secondary-action"
+                  onClick={closeEditor}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={
+                    editState === "saving" ||
+                    !replacementContent.trim() ||
+                    editConflict !== null
+                  }
+                  type="submit"
+                >
+                  {editState === "saving"
+                    ? "Saving…"
+                    : "Save replacement"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {revisionHistoryEntry ? (
+        <div className="diary-composer-backdrop">
+          <section
+            aria-labelledby="diary-revision-history-title"
+            aria-modal="true"
+            className="diary-composer diary-revision-history"
+            role="dialog"
+          >
+            <div className="diary-composer__heading">
+              <div>
+                <p className="diary-kicker">
+                  Entry revision {revisionHistoryEntry.revision_number}
+                </p>
+                <h2 id="diary-revision-history-title">Revision History</h2>
+              </div>
+              <button
+                aria-label="Close revision history"
+                className="diary-icon-action"
+                onClick={closeRevisionHistory}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            {revisionHistoryState === "loading" ? (
+              <p role="status">Loading revision history…</p>
+            ) : revisionHistoryState === "unavailable" ? (
+              <p className="diary-auth-error" role="alert">
+                Diary could not load revision history.
+              </p>
+            ) : (
+              <div className="diary-revision-list">
+                {revisionHistory?.revisions.map((revision) => (
+                  <article className="diary-revision" key={revision.id}>
+                    <div className="diary-revision__heading">
+                      <h3>
+                        Revision {revision.revision_number}
+                        {revision.is_current ? " · Current" : ""}
+                      </h3>
+                      <time dateTime={revision.created_at}>
+                        {formatTaipei(revision.created_at)}
+                      </time>
+                    </div>
+                    <p>{revision.original_content}</p>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       ) : null}

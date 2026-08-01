@@ -551,8 +551,8 @@ test("Calendar updates Taipei Today across midnight without stealing a browsed m
         "sb-127-auth-token",
         JSON.stringify({
           access_token: ownerAccessToken,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-          expires_in: 3600,
+          expires_at: Math.floor(Date.now() / 1000) + 48 * 60 * 60,
+          expires_in: 48 * 60 * 60,
           refresh_token: "calendar-midnight-refresh-token",
           token_type: "bearer",
           user: {

@@ -97,6 +97,39 @@ export type EntryDateGroup = {
   entries: EntryRecord[];
 };
 
+export type EntryRevision = {
+  created_at: string;
+  entry_id: string;
+  id: string;
+  is_current: boolean;
+  original_content: string;
+  revision_number: number;
+};
+
+export type EntryRevisionHistory = {
+  current_revision_id: string;
+  entry_id: string;
+  revisions: EntryRevision[];
+};
+
+type EditConflictResponse = {
+  detail: {
+    code: "stale_entry_revision";
+    current_entry: EntryRecord;
+    message: string;
+  };
+};
+
+export class EntryEditConflict extends Error {
+  readonly currentEntry: EntryRecord;
+
+  constructor(currentEntry: EntryRecord) {
+    super("Original Content changed after this editor opened.");
+    this.name = "EntryEditConflict";
+    this.currentEntry = currentEntry;
+  }
+}
+
 export type HistoryDirection = "older" | "newer";
 
 export type HistoryPage = {
@@ -230,4 +263,62 @@ export async function createEntry(
     throw new Error("Diary could not save the Entry");
   }
   return (await response.json()) as EntryRecord;
+}
+
+export async function replaceOriginalContent(
+  accessToken: string,
+  entryId: string,
+  input: {
+    expected_current_revision_id: string;
+    original_content: string;
+  },
+): Promise<EntryRecord> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/${entryId}/original-content`,
+    {
+      body: JSON.stringify(input),
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "PUT",
+    },
+  );
+  if (response.status === 409) {
+    const conflict = (await response.json()) as EditConflictResponse;
+    if (
+      conflict.detail?.code === "stale_entry_revision" &&
+      conflict.detail.current_entry
+    ) {
+      throw new EntryEditConflict(conflict.detail.current_entry);
+    }
+  }
+  if (!response.ok) {
+    throw new Error("Diary could not edit Original Content");
+  }
+  return (await response.json()) as EntryRecord;
+}
+
+export async function loadEntryRevisions(
+  accessToken: string,
+  entryId: string,
+  signal: AbortSignal,
+): Promise<EntryRevisionHistory> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/${entryId}/revisions`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not load revision history");
+  }
+  return (await response.json()) as EntryRevisionHistory;
 }
