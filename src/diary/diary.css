@@ -596,6 +596,35 @@ body {
   line-height: 1.65;
 }
 
+.diary-revision__restore {
+  margin-top: 0.9rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #3e5943;
+  cursor: pointer;
+  font: 500 0.75rem "DM Mono", monospace;
+  text-decoration: underline;
+}
+
+.diary-restore-confirmation {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid rgb(62 89 67 / 35%);
+  border-radius: 0.75rem;
+  background: #f8f3e7;
+}
+
+.diary-restore-confirmation h3,
+.diary-restore-confirmation p {
+  margin: 0;
+}
+
+.diary-restore-confirmation p {
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+
 .diary-composer__form label {
   color: #4f5149;
   font: 0.75rem "DM Mono", monospace;
@@ -654,6 +683,7 @@ body {
 .diary-entry-actions__menu button:focus-visible,
 .diary-icon-action:focus-visible,
 .diary-edit-conflict button:focus-visible,
+.diary-revision__restore:focus-visible,
 .diary-save-confirmation button:focus-visible,
 .diary-composer__form textarea:focus-visible,
 .diary-composer__form input:focus-visible,

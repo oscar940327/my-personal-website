@@ -12,13 +12,16 @@ import {
 import {
   createEntry,
   EntryEditConflict,
+  EntryRestoreConflict,
   type EntryDateGroup,
   type EntryRecord,
+  type EntryRevision,
   type EntryRevisionHistory,
   type HistoryDirection,
   loadEntryRevisions,
   loadHistoryEntries,
   replaceOriginalContent,
+  restoreEntryRevision,
 } from "./api";
 import { CalendarView } from "./CalendarView";
 import {
@@ -264,6 +267,12 @@ export function EntryExperience({
   const [revisionHistoryState, setRevisionHistoryState] = useState<
     "loading" | "ready" | "unavailable"
   >("loading");
+  const [restoreRevision, setRestoreRevision] =
+    useState<EntryRevision | null>(null);
+  const [restoreState, setRestoreState] = useState<"idle" | "saving">(
+    "idle",
+  );
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const idempotencyKey = useRef("");
   const preservedScrollPosition = useRef(0);
   const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
@@ -620,6 +629,8 @@ export function EntryExperience({
     setRevisionHistoryEntry(entry);
     setRevisionHistory(null);
     setRevisionHistoryState("loading");
+    setRestoreRevision(null);
+    setRestoreError(null);
     try {
       const history = await loadEntryRevisions(
         accessToken,
@@ -642,10 +653,66 @@ export function EntryExperience({
   }
 
   function closeRevisionHistory() {
+    if (restoreState === "saving") {
+      return;
+    }
     revisionHistoryController.current?.abort();
     revisionHistoryController.current = null;
     setRevisionHistoryEntry(null);
     setRevisionHistory(null);
+    setRestoreRevision(null);
+    setRestoreError(null);
+  }
+
+  async function confirmRevisionRestore() {
+    if (!revisionHistoryEntry || !revisionHistory || !restoreRevision) {
+      return;
+    }
+
+    setRestoreState("saving");
+    setRestoreError(null);
+    try {
+      const restored = await restoreEntryRevision(
+        accessToken,
+        revisionHistoryEntry.id,
+        {
+          expected_current_revision_id:
+            revisionHistory.current_revision_id,
+          selected_revision_id: restoreRevision.id,
+        },
+      );
+      setEntries((current) => mergeEntries(current, [restored]));
+      setSavedEntry((current) =>
+        current?.id === restored.id ? restored : current
+      );
+      setRevisionHistoryEntry(null);
+      setRevisionHistory(null);
+      setRestoreRevision(null);
+    } catch (error) {
+      if (error instanceof EntryRestoreConflict) {
+        setEntries((current) =>
+          mergeEntries(current, [error.currentEntry])
+        );
+        setSavedEntry((current) =>
+          current?.id === error.currentEntry.id
+            ? error.currentEntry
+            : current
+        );
+        setRevisionHistoryEntry(error.currentEntry);
+        setRevisionHistory(null);
+        setRevisionHistoryState("ready");
+        setRestoreRevision(null);
+        setRestoreError(
+          `Restore was not applied because Revision ${error.currentEntry.revision_number} is now current. Close and reopen Revision History before trying again.`,
+        );
+      } else {
+        setRestoreError(
+          "Diary could not restore this revision. No revision was changed.",
+        );
+      }
+    } finally {
+      setRestoreState("idle");
+    }
   }
 
   function handleComposerShortcut(
@@ -701,6 +768,9 @@ export function EntryExperience({
           right.date.localeCompare(left.date)
         )
       : groups;
+  const currentHistoryRevision = revisionHistory?.revisions.find(
+    (revision) => revision.is_current,
+  );
 
   return (
     <>
@@ -1012,22 +1082,87 @@ export function EntryExperience({
                 Diary could not load revision history.
               </p>
             ) : (
-              <div className="diary-revision-list">
-                {revisionHistory?.revisions.map((revision) => (
-                  <article className="diary-revision" key={revision.id}>
-                    <div className="diary-revision__heading">
-                      <h3>
-                        Revision {revision.revision_number}
-                        {revision.is_current ? " · Current" : ""}
-                      </h3>
-                      <time dateTime={revision.created_at}>
-                        {formatTaipei(revision.created_at)}
-                      </time>
+              <>
+                <div className="diary-revision-list">
+                  {revisionHistory?.revisions.map((revision) => (
+                    <article className="diary-revision" key={revision.id}>
+                      <div className="diary-revision__heading">
+                        <h3>
+                          Revision {revision.revision_number}
+                          {revision.is_current ? " · Current" : ""}
+                        </h3>
+                        <time dateTime={revision.created_at}>
+                          {formatTaipei(revision.created_at)}
+                        </time>
+                      </div>
+                      <p>{revision.original_content}</p>
+                      {!revision.is_current ? (
+                        <button
+                          className="diary-revision__restore"
+                          onClick={() => {
+                            setRestoreRevision(revision);
+                            setRestoreError(null);
+                          }}
+                          type="button"
+                        >
+                          Restore Revision {revision.revision_number}
+                        </button>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+                {restoreRevision && revisionHistory ? (
+                  <section
+                    aria-labelledby="diary-restore-confirmation-title"
+                    className="diary-restore-confirmation"
+                    role="alertdialog"
+                  >
+                    <h3 id="diary-restore-confirmation-title">
+                      Restore Revision {restoreRevision.revision_number}?
+                    </h3>
+                    <p>
+                      This copies Revision {restoreRevision.revision_number}
+                      {" "}into a new Revision{
+                        currentHistoryRevision
+                          ? ` ${currentHistoryRevision.revision_number + 1}`
+                          : ""
+                      }. Revision {restoreRevision.revision_number} and Revision{
+                        currentHistoryRevision
+                          ? ` ${currentHistoryRevision.revision_number}`
+                          : ""
+                      } remain unchanged.
+                    </p>
+                    {restoreError ? (
+                      <p className="diary-auth-error" role="alert">
+                        {restoreError}
+                      </p>
+                    ) : null}
+                    <div className="diary-composer__actions">
+                      <button
+                        className="diary-secondary-action"
+                        disabled={restoreState === "saving"}
+                        onClick={() => setRestoreRevision(null)}
+                        type="button"
+                      >
+                        Cancel restore
+                      </button>
+                      <button
+                        disabled={restoreState === "saving"}
+                        onClick={() => void confirmRevisionRestore()}
+                        type="button"
+                      >
+                        {restoreState === "saving"
+                          ? "Restoring…"
+                          : "Confirm restore"}
+                      </button>
                     </div>
-                    <p>{revision.original_content}</p>
-                  </article>
-                ))}
-              </div>
+                  </section>
+                ) : restoreError ? (
+                  <p className="diary-auth-error" role="alert">
+                    {restoreError}
+                  </p>
+                ) : null}
+              </>
             )}
           </section>
         </div>

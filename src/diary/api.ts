@@ -120,12 +120,30 @@ type EditConflictResponse = {
   };
 };
 
+type RestoreConflictResponse = {
+  detail: {
+    code: "stale_entry_revision";
+    current_entry: EntryRecord;
+    message: string;
+  };
+};
+
 export class EntryEditConflict extends Error {
   readonly currentEntry: EntryRecord;
 
   constructor(currentEntry: EntryRecord) {
     super("Original Content changed after this editor opened.");
     this.name = "EntryEditConflict";
+    this.currentEntry = currentEntry;
+  }
+}
+
+export class EntryRestoreConflict extends Error {
+  readonly currentEntry: EntryRecord;
+
+  constructor(currentEntry: EntryRecord) {
+    super("Original Content changed after this restore was prepared.");
+    this.name = "EntryRestoreConflict";
     this.currentEntry = currentEntry;
   }
 }
@@ -321,4 +339,40 @@ export async function loadEntryRevisions(
     throw new Error("Diary could not load revision history");
   }
   return (await response.json()) as EntryRevisionHistory;
+}
+
+export async function restoreEntryRevision(
+  accessToken: string,
+  entryId: string,
+  input: {
+    expected_current_revision_id: string;
+    selected_revision_id: string;
+  },
+): Promise<EntryRecord> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/${entryId}/revision-restorations`,
+    {
+      body: JSON.stringify(input),
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+  if (response.status === 409) {
+    const conflict = (await response.json()) as RestoreConflictResponse;
+    if (
+      conflict.detail?.code === "stale_entry_revision" &&
+      conflict.detail.current_entry
+    ) {
+      throw new EntryRestoreConflict(conflict.detail.current_entry);
+    }
+  }
+  if (!response.ok) {
+    throw new Error("Diary could not restore the historical revision");
+  }
+  return (await response.json()) as EntryRecord;
 }
