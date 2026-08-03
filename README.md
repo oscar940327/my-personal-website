@@ -28,6 +28,8 @@ Website: https://oscar940327.github.io/my-personal-website/
 - Timeline for project history
 - Responsive layout for desktop and mobile
 - Shared `DIARY` navigation below `JOURNEY` and above `MktAgent`
+- Explicit Entry action for changing Entry Time without changing Captured time
+  or immutable Original Content revisions
 - Vite multi-page build that preserves the existing static pages and assets
 
 ## Tech Stack

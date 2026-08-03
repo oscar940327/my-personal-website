@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import {
+  changeEntryTime,
   createEntry,
   EntryEditConflict,
   EntryRestoreConflict,
@@ -174,12 +175,14 @@ function restoreReadingAnchor(anchor: ReadingAnchor | null): boolean {
 
 type EntryCardProps = {
   entry: EntryRecord;
+  onChangeTime: (entry: EntryRecord) => void;
   onEdit: (entry: EntryRecord) => void;
   onViewRevisions: (entry: EntryRecord) => void;
 };
 
 function EntryCard({
   entry,
+  onChangeTime,
   onEdit,
   onViewRevisions,
 }: EntryCardProps) {
@@ -202,6 +205,15 @@ function EntryCard({
       <details className="diary-entry-actions">
         <summary>Entry actions</summary>
         <div className="diary-entry-actions__menu">
+          <button
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              onChangeTime(entry);
+            }}
+            type="button"
+          >
+            Change Entry Time
+          </button>
           <button
             onClick={(event) => {
               event.currentTarget.closest("details")?.removeAttribute("open");
@@ -234,6 +246,7 @@ export function EntryExperience({
   const usesTodayAnchor = requestedAnchorDate.current === undefined;
   const [surface, setSurface] = useState<"history" | "calendar">("history");
   const [historyRequestVersion, setHistoryRequestVersion] = useState(0);
+  const [calendarRequestVersion, setCalendarRequestVersion] = useState(0);
   const [anchorDate, setAnchorDate] = useState("");
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
@@ -260,6 +273,13 @@ export function EntryExperience({
   const [editState, setEditState] = useState<"idle" | "saving">("idle");
   const [editError, setEditError] = useState<string | null>(null);
   const [editConflict, setEditConflict] = useState<EntryRecord | null>(null);
+  const [timeEditingEntry, setTimeEditingEntry] =
+    useState<EntryRecord | null>(null);
+  const [replacementEntryTime, setReplacementEntryTime] = useState("");
+  const [entryTimeState, setEntryTimeState] = useState<"idle" | "saving">(
+    "idle",
+  );
+  const [entryTimeError, setEntryTimeError] = useState<string | null>(null);
   const [revisionHistoryEntry, setRevisionHistoryEntry] =
     useState<EntryRecord | null>(null);
   const [revisionHistory, setRevisionHistory] =
@@ -276,6 +296,7 @@ export function EntryExperience({
   const idempotencyKey = useRef("");
   const preservedScrollPosition = useRef(0);
   const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
+  const entryTimeReadingAnchor = useRef<ReadingAnchor | null>(null);
   const pendingHistoryAnchor = useRef<ReadingAnchor | null>(null);
   const adjacentController = useRef<AbortController | null>(null);
   const revisionHistoryController = useRef<AbortController | null>(null);
@@ -285,10 +306,16 @@ export function EntryExperience({
   const userScrolledHistory = useRef(false);
 
   useLayoutEffect(() => {
-    if (pendingHistoryAnchor.current) {
-      restoreReadingAnchor(pendingHistoryAnchor.current);
-      pendingHistoryAnchor.current = null;
+    const anchor = pendingHistoryAnchor.current;
+    if (!anchor) {
+      return;
     }
+    restoreReadingAnchor(anchor);
+    pendingHistoryAnchor.current = null;
+    const frame = window.requestAnimationFrame(() => {
+      restoreReadingAnchor(anchor);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [entries]);
 
   useEffect(() => {
@@ -610,6 +637,62 @@ export function EntryExperience({
     setEditError(null);
   }
 
+  function openEntryTimeEditor(entry: EntryRecord) {
+    entryTimeReadingAnchor.current = captureReadingAnchor();
+    setTimeEditingEntry(entry);
+    setReplacementEntryTime(
+      taipeiDateTimeInputValue(new Date(entry.entry_at)),
+    );
+    setEntryTimeError(null);
+  }
+
+  function closeEntryTimeEditor() {
+    if (entryTimeState === "saving") {
+      return;
+    }
+    setTimeEditingEntry(null);
+    entryTimeReadingAnchor.current = null;
+    setEntryTimeError(null);
+  }
+
+  async function saveEntryTime(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!timeEditingEntry || !replacementEntryTime) {
+      setEntryTimeError("Entry Time is required.");
+      return;
+    }
+
+    setEntryTimeState("saving");
+    setEntryTimeError(null);
+    try {
+      const changed = await changeEntryTime(
+        accessToken,
+        timeEditingEntry.id,
+        { entry_at: asTaipeiIso(replacementEntryTime) },
+      );
+      pendingHistoryAnchor.current = entryTimeReadingAnchor.current;
+      setEntries((current) => mergeEntries(current, [changed]));
+      setSavedEntry((current) =>
+        current?.id === changed.id ? changed : current
+      );
+      setTimeEditingEntry(null);
+      entryTimeReadingAnchor.current = null;
+      historyGeneration.current += 1;
+      adjacentController.current?.abort();
+      adjacentController.current = null;
+      setAdjacentLoad(null);
+      setAdjacentError(null);
+      setHistoryRequestVersion((current) => current + 1);
+      setCalendarRequestVersion((current) => current + 1);
+    } catch {
+      setEntryTimeError(
+        "Diary could not change Entry Time. No Entry metadata or revision was changed.",
+      );
+    } finally {
+      setEntryTimeState("idle");
+    }
+  }
+
   function handleEditorShortcut(
     event: KeyboardEvent<HTMLTextAreaElement>,
   ) {
@@ -809,6 +892,7 @@ export function EntryExperience({
         <CalendarView
           accessToken={accessToken}
           onSelectDate={jumpToHistoryDate}
+          refreshVersion={calendarRequestVersion}
         />
       ) : (
       <section className="diary-history" aria-labelledby="diary-history-title">
@@ -877,6 +961,7 @@ export function EntryExperience({
                         <EntryCard
                           entry={entry}
                           key={entry.id}
+                          onChangeTime={openEntryTimeEditor}
                           onEdit={openEditor}
                           onViewRevisions={(selectedEntry) =>
                             void openRevisionHistory(selectedEntry)
@@ -952,12 +1037,88 @@ export function EntryExperience({
             <div className="diary-saved-entry-preview">
               <EntryCard
                 entry={savedEntry}
+                onChangeTime={openEntryTimeEditor}
                 onEdit={openEditor}
                 onViewRevisions={(selectedEntry) =>
                   void openRevisionHistory(selectedEntry)
                 }
               />
             </div>
+          </section>
+        </div>
+      ) : null}
+
+      {timeEditingEntry ? (
+        <div className="diary-composer-backdrop">
+          <section
+            aria-labelledby="diary-entry-time-editor-title"
+            aria-modal="true"
+            className="diary-composer"
+            role="dialog"
+          >
+            <div className="diary-composer__heading">
+              <div>
+                <p className="diary-kicker">Entry metadata</p>
+                <h2 id="diary-entry-time-editor-title">Change Entry Time</h2>
+              </div>
+              <button
+                aria-label="Close Entry Time editor"
+                className="diary-icon-action"
+                onClick={closeEntryTimeEditor}
+                type="button"
+              >
+                &times;
+              </button>
+            </div>
+            <form className="diary-composer__form" onSubmit={saveEntryTime}>
+              <label htmlFor="diary-replacement-entry-time">
+                New Entry Time
+              </label>
+              <input
+                autoFocus
+                id="diary-replacement-entry-time"
+                onChange={(event) =>
+                  setReplacementEntryTime(event.target.value)
+                }
+                required
+                type="datetime-local"
+                value={replacementEntryTime}
+              />
+              <p className="diary-composer__hint">
+                Changing Entry Time changes Entry metadata only. Captured time
+                and Original Content revisions remain unchanged.
+              </p>
+              <dl className="diary-entry__metadata">
+                <div>
+                  <dt>Captured</dt>
+                  <dd>{formatTaipei(timeEditingEntry.created_at)}</dd>
+                </div>
+                <div>
+                  <dt>Current Revision</dt>
+                  <dd>Revision {timeEditingEntry.revision_number}</dd>
+                </div>
+              </dl>
+              {entryTimeError ? (
+                <p className="diary-auth-error" role="alert">
+                  {entryTimeError}
+                </p>
+              ) : null}
+              <div className="diary-composer__actions">
+                <button
+                  className="diary-secondary-action"
+                  onClick={closeEntryTimeEditor}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={entryTimeState === "saving" || !replacementEntryTime}
+                  type="submit"
+                >
+                  {entryTimeState === "saving" ? "Saving…" : "Save Entry Time"}
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       ) : null}

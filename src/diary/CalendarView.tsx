@@ -18,6 +18,7 @@ import {
 type CalendarViewProps = {
   accessToken: string;
   onSelectDate: (date: string) => void;
+  refreshVersion: number;
 };
 
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -63,6 +64,7 @@ function monthDates(month: string): Array<string | null> {
 export function CalendarView({
   accessToken,
   onSelectDate,
+  refreshVersion,
 }: CalendarViewProps) {
   const [today, setToday] = useState(taipeiToday);
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -91,7 +93,7 @@ export function CalendarView({
         }
       });
     return () => controller.abort();
-  }, [accessToken, month]);
+  }, [accessToken, month, refreshVersion]);
 
   useLayoutEffect(() => {
     let active = true;

@@ -283,6 +283,32 @@ export async function createEntry(
   return (await response.json()) as EntryRecord;
 }
 
+export async function changeEntryTime(
+  accessToken: string,
+  entryId: string,
+  input: {
+    entry_at: string;
+  },
+): Promise<EntryRecord> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/${entryId}/entry-time`,
+    {
+      body: JSON.stringify(input),
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "PUT",
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not change Entry Time");
+  }
+  return (await response.json()) as EntryRecord;
+}
+
 export async function replaceOriginalContent(
   accessToken: string,
   entryId: string,

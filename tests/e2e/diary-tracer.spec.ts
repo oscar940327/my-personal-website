@@ -574,7 +574,9 @@ test("authenticated owner captures an Entry without losing the reading position"
     ),
   ).toBeVisible();
   await expect(savedEntry.getByText("AI processing pending")).toBeVisible();
-  await expect(savedEntry.getByText(/Entry Time/)).toBeVisible();
+  await expect(
+    savedEntry.getByText("Entry Time", { exact: true }),
+  ).toBeVisible();
   await expect(savedEntry.getByText(/Captured/)).toBeVisible();
 });
 
