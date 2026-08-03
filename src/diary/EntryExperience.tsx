@@ -40,6 +40,14 @@ type ReadingAnchor = {
   viewportTop: number;
 };
 
+type HistoryWindow = {
+  entries: EntryRecord[];
+  newerCursor: string | null;
+  olderCursor: string | null;
+};
+
+const HISTORY_PAGE_LIMIT = 20;
+
 function asTaipeiIso(inputValue: string): string {
   return `${inputValue}:00+08:00`;
 }
@@ -126,6 +134,72 @@ function mergeEntries(
     entriesById.set(entry.id, entry);
   }
   return sortEntries([...entriesById.values()]);
+}
+
+async function rebuildHistoryWindow(
+  accessToken: string,
+  anchorDate: string,
+  targetEntryCount: number,
+  signal: AbortSignal,
+): Promise<HistoryWindow> {
+  const initialPage = await loadHistoryEntries(
+    accessToken,
+    {
+      anchorDate,
+      limit: HISTORY_PAGE_LIMIT,
+    },
+    signal,
+  );
+  let rebuiltEntries = sortEntries(flattenGroups(initialPage.groups));
+  let olderCursor = initialPage.older_cursor;
+  let newerCursor = initialPage.newer_cursor;
+  const requestedCursors = new Set<string>();
+  const requestLimit = Math.max(
+    1,
+    Math.ceil(targetEntryCount / HISTORY_PAGE_LIMIT) + 1,
+  );
+  let requestCount = 1;
+
+  while (
+    rebuiltEntries.length < targetEntryCount &&
+    requestCount < requestLimit
+  ) {
+    const direction: HistoryDirection | null = olderCursor
+      ? "older"
+      : newerCursor
+        ? "newer"
+        : null;
+    const cursor = direction === "older" ? olderCursor : newerCursor;
+    if (!direction || !cursor || requestedCursors.has(cursor)) {
+      break;
+    }
+    requestedCursors.add(cursor);
+    const page = await loadHistoryEntries(
+      accessToken,
+      {
+        cursor,
+        direction,
+        limit: HISTORY_PAGE_LIMIT,
+      },
+      signal,
+    );
+    rebuiltEntries = mergeEntries(
+      rebuiltEntries,
+      flattenGroups(page.groups),
+    );
+    if (direction === "older") {
+      olderCursor = page.older_cursor;
+    } else {
+      newerCursor = page.newer_cursor;
+    }
+    requestCount += 1;
+  }
+
+  return {
+    entries: rebuiltEntries,
+    newerCursor,
+    olderCursor,
+  };
 }
 
 function groupEntries(entries: EntryRecord[]): EntryDateGroup[] {
@@ -664,30 +738,65 @@ export function EntryExperience({
 
     setEntryTimeState("saving");
     setEntryTimeError(null);
+    let changedEntry: EntryRecord | null = null;
     try {
       const changed = await changeEntryTime(
         accessToken,
         timeEditingEntry.id,
         { entry_at: asTaipeiIso(replacementEntryTime) },
       );
-      pendingHistoryAnchor.current = entryTimeReadingAnchor.current;
-      setEntries((current) => mergeEntries(current, [changed]));
-      setSavedEntry((current) =>
-        current?.id === changed.id ? changed : current
+      changedEntry = changed;
+      const readingAnchor = entryTimeReadingAnchor.current;
+      const readingEntryId = readingAnchor?.elementId.replace(
+        /^entry-/,
+        "",
       );
-      setTimeEditingEntry(null);
-      entryTimeReadingAnchor.current = null;
+      const readingEntry =
+        readingEntryId === changed.id
+          ? changed
+          : entries.find((entry) => entry.id === readingEntryId);
       historyGeneration.current += 1;
       adjacentController.current?.abort();
       adjacentController.current = null;
       setAdjacentLoad(null);
       setAdjacentError(null);
-      setHistoryRequestVersion((current) => current + 1);
+      const controller = new AbortController();
+      const rebuilt = await rebuildHistoryWindow(
+        accessToken,
+        readingEntry?.owner_date ?? changed.owner_date,
+        entries.length,
+        controller.signal,
+      );
+      pendingHistoryAnchor.current = readingAnchor;
+      setEntries(rebuilt.entries);
+      setOlderCursor(rebuilt.olderCursor);
+      setNewerCursor(rebuilt.newerCursor);
+      setHistoryState("ready");
+      setSavedEntry((current) =>
+        current?.id === changed.id ? changed : current
+      );
+      setTimeEditingEntry(null);
+      entryTimeReadingAnchor.current = null;
       setCalendarRequestVersion((current) => current + 1);
     } catch {
-      setEntryTimeError(
-        "Diary could not change Entry Time. No Entry metadata or revision was changed.",
-      );
+      if (changedEntry) {
+        const committedEntry = changedEntry;
+        pendingHistoryAnchor.current = entryTimeReadingAnchor.current;
+        setEntries((current) => mergeEntries(current, [committedEntry]));
+        setSavedEntry((current) =>
+          current?.id === committedEntry.id ? committedEntry : current
+        );
+        setTimeEditingEntry(null);
+        entryTimeReadingAnchor.current = null;
+        setAdjacentError(
+          "Entry Time changed, but Diary could not refresh the loaded History window. Try loading History again.",
+        );
+        setCalendarRequestVersion((current) => current + 1);
+      } else {
+        setEntryTimeError(
+          "Diary could not change Entry Time. No Entry metadata or revision was changed.",
+        );
+      }
     } finally {
       setEntryTimeState("idle");
     }
