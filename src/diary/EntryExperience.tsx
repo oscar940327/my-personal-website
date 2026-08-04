@@ -46,6 +46,13 @@ type HistoryWindow = {
   olderCursor: string | null;
 };
 
+type HistoryRecovery = {
+  anchorDate: string;
+  anchorEntryId: string;
+  readingAnchor: ReadingAnchor | null;
+  targetEntryCount: number;
+};
+
 const HISTORY_PAGE_LIMIT = 20;
 
 function asTaipeiIso(inputValue: string): string {
@@ -96,18 +103,26 @@ function timestampMicroseconds(isoValue: string): bigint {
           Number(offset.slice(1, 3)) * 60 +
           Number(offset.slice(4, 6))
         ) * (offset.startsWith("+") ? 1 : -1);
-  const utcMilliseconds =
-    Date.UTC(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      Number(second),
-    ) -
-    offsetMinutes * 60_000;
+  const numericYear = Number(year);
+  const numericMonth = Number(month);
+  const adjustedYear = numericYear - (numericMonth <= 2 ? 1 : 0);
+  const era = Math.floor(adjustedYear / 400);
+  const yearOfEra = adjustedYear - era * 400;
+  const marchBasedMonth = numericMonth + (numericMonth > 2 ? -3 : 9);
+  const dayOfYear =
+    Math.floor((153 * marchBasedMonth + 2) / 5) + Number(day) - 1;
+  const dayOfEra =
+    yearOfEra * 365 +
+    Math.floor(yearOfEra / 4) -
+    Math.floor(yearOfEra / 100) +
+    dayOfYear;
+  const daysSinceUnixEpoch = BigInt(era * 146_097 + dayOfEra - 719_468);
+  const utcSeconds =
+    daysSinceUnixEpoch * 86_400n +
+    BigInt(Number(hour) * 3_600 + Number(minute) * 60 + Number(second)) -
+    BigInt(offsetMinutes * 60);
   return (
-    BigInt(utcMilliseconds) * 1_000n +
+    utcSeconds * 1_000_000n +
     BigInt(fraction.padEnd(6, "0"))
   );
 }
@@ -139,6 +154,7 @@ function mergeEntries(
 async function rebuildHistoryWindow(
   accessToken: string,
   anchorDate: string,
+  anchorEntryId: string,
   targetEntryCount: number,
   signal: AbortSignal,
 ): Promise<HistoryWindow> {
@@ -161,7 +177,8 @@ async function rebuildHistoryWindow(
   let requestCount = 1;
 
   while (
-    rebuiltEntries.length < targetEntryCount &&
+    (rebuiltEntries.length < targetEntryCount ||
+      !rebuiltEntries.some((entry) => entry.id === anchorEntryId)) &&
     requestCount < requestLimit
   ) {
     const direction: HistoryDirection | null = olderCursor
@@ -193,6 +210,10 @@ async function rebuildHistoryWindow(
       newerCursor = page.newer_cursor;
     }
     requestCount += 1;
+  }
+
+  if (!rebuiltEntries.some((entry) => entry.id === anchorEntryId)) {
+    throw new Error("History rebuild did not locate its Entry anchor");
   }
 
   return {
@@ -332,6 +353,11 @@ export function EntryExperience({
     HistoryDirection | null
   >(null);
   const [adjacentError, setAdjacentError] = useState<string | null>(null);
+  const [historyRecovery, setHistoryRecovery] =
+    useState<HistoryRecovery | null>(null);
+  const [historyRecoveryState, setHistoryRecoveryState] = useState<
+    "idle" | "loading"
+  >("idle");
   const [composerOpen, setComposerOpen] = useState(false);
   const [content, setContent] = useState("");
   const [entryTime, setEntryTime] = useState("");
@@ -739,6 +765,7 @@ export function EntryExperience({
     setEntryTimeState("saving");
     setEntryTimeError(null);
     let changedEntry: EntryRecord | null = null;
+    let recovery: HistoryRecovery | null = null;
     try {
       const changed = await changeEntryTime(
         accessToken,
@@ -755,6 +782,12 @@ export function EntryExperience({
         readingEntryId === changed.id
           ? changed
           : entries.find((entry) => entry.id === readingEntryId);
+      recovery = {
+        anchorDate: readingEntry?.owner_date ?? changed.owner_date,
+        anchorEntryId: readingEntry?.id ?? changed.id,
+        readingAnchor,
+        targetEntryCount: entries.length,
+      };
       historyGeneration.current += 1;
       adjacentController.current?.abort();
       adjacentController.current = null;
@@ -763,8 +796,9 @@ export function EntryExperience({
       const controller = new AbortController();
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
-        readingEntry?.owner_date ?? changed.owner_date,
-        entries.length,
+        recovery.anchorDate,
+        recovery.anchorEntryId,
+        recovery.targetEntryCount,
         controller.signal,
       );
       pendingHistoryAnchor.current = readingAnchor;
@@ -772,6 +806,7 @@ export function EntryExperience({
       setOlderCursor(rebuilt.olderCursor);
       setNewerCursor(rebuilt.newerCursor);
       setHistoryState("ready");
+      setHistoryRecovery(null);
       setSavedEntry((current) =>
         current?.id === changed.id ? changed : current
       );
@@ -779,17 +814,19 @@ export function EntryExperience({
       entryTimeReadingAnchor.current = null;
       setCalendarRequestVersion((current) => current + 1);
     } catch {
-      if (changedEntry) {
+      if (changedEntry && recovery) {
         const committedEntry = changedEntry;
-        pendingHistoryAnchor.current = entryTimeReadingAnchor.current;
         setEntries((current) => mergeEntries(current, [committedEntry]));
+        setOlderCursor(null);
+        setNewerCursor(null);
+        setHistoryRecovery(recovery);
         setSavedEntry((current) =>
           current?.id === committedEntry.id ? committedEntry : current
         );
         setTimeEditingEntry(null);
         entryTimeReadingAnchor.current = null;
         setAdjacentError(
-          "Entry Time changed, but Diary could not refresh the loaded History window. Try loading History again.",
+          "Entry Time changed, but Diary needs a fresh History snapshot. Refresh History to continue browsing.",
         );
         setCalendarRequestVersion((current) => current + 1);
       } else {
@@ -799,6 +836,51 @@ export function EntryExperience({
       }
     } finally {
       setEntryTimeState("idle");
+    }
+  }
+
+  async function recoverHistory() {
+    if (
+      !historyRecovery ||
+      historyRecoveryState === "loading" ||
+      adjacentController.current !== null
+    ) {
+      return;
+    }
+
+    setHistoryRecoveryState("loading");
+    historyGeneration.current += 1;
+    const controller = new AbortController();
+    adjacentController.current = controller;
+    try {
+      const rebuilt = await rebuildHistoryWindow(
+        accessToken,
+        historyRecovery.anchorDate,
+        historyRecovery.anchorEntryId,
+        historyRecovery.targetEntryCount,
+        controller.signal,
+      );
+      if (controller.signal.aborted) {
+        return;
+      }
+      pendingHistoryAnchor.current = historyRecovery.readingAnchor;
+      setEntries(rebuilt.entries);
+      setOlderCursor(rebuilt.olderCursor);
+      setNewerCursor(rebuilt.newerCursor);
+      setHistoryState("ready");
+      setHistoryRecovery(null);
+      setAdjacentError(null);
+    } catch {
+      if (!controller.signal.aborted) {
+        setAdjacentError(
+          "Entry Time changed, but Diary still needs a fresh History snapshot. Refresh History to try again.",
+        );
+      }
+    } finally {
+      if (adjacentController.current === controller) {
+        adjacentController.current = null;
+      }
+      setHistoryRecoveryState("idle");
     }
   }
 
@@ -1106,6 +1188,18 @@ export function EntryExperience({
           <p className="diary-auth-error" role="alert">
             {adjacentError}
           </p>
+        ) : null}
+        {historyRecovery ? (
+          <button
+            className="diary-secondary-action"
+            disabled={historyRecoveryState === "loading"}
+            onClick={() => void recoverHistory()}
+            type="button"
+          >
+            {historyRecoveryState === "loading"
+              ? "Refreshing History…"
+              : "Refresh History"}
+          </button>
         ) : null}
       </section>
       )}
