@@ -48,7 +48,7 @@ type HistoryWindow = {
 
 type HistoryRecovery = {
   anchorDate: string;
-  anchorEntryId: string;
+  activeEntryId: string;
   readingAnchor: ReadingAnchor | null;
   targetEntryCount: number;
 };
@@ -156,7 +156,7 @@ function mergeEntries(
 async function rebuildHistoryWindow(
   accessToken: string,
   anchorDate: string,
-  anchorEntryId: string,
+  activeEntryId: string,
   targetEntryCount: number,
   signal: AbortSignal,
 ): Promise<HistoryWindow> {
@@ -180,7 +180,7 @@ async function rebuildHistoryWindow(
 
   while (
     (rebuiltEntries.length < boundedTargetEntryCount ||
-      !rebuiltEntries.some((entry) => entry.id === anchorEntryId)) &&
+      !rebuiltEntries.some((entry) => entry.id === activeEntryId)) &&
     requestCount < HISTORY_ANCHOR_SEARCH_PAGE_LIMIT
   ) {
     const direction: HistoryDirection | null = olderCursor
@@ -214,8 +214,8 @@ async function rebuildHistoryWindow(
     requestCount += 1;
   }
 
-  if (!rebuiltEntries.some((entry) => entry.id === anchorEntryId)) {
-    throw new Error("History rebuild did not locate its Entry anchor");
+  if (!rebuiltEntries.some((entry) => entry.id === activeEntryId)) {
+    throw new Error("History rebuild did not locate its active Entry");
   }
 
   return {
@@ -407,14 +407,19 @@ export function EntryExperience({
   const olderBoundary = useRef<HTMLDivElement>(null);
   const userScrolledHistory = useRef(false);
 
-  function retireHistoryOwnership() {
+  function retireHistoryOwnership(retireOperationState = false) {
     historyGeneration.current += 1;
     historyRequestController.current?.abort();
     historyRequestController.current = null;
+    if (retireOperationState) {
+      pendingHistoryAnchor.current = null;
+      setAdjacentLoad(null);
+      setHistoryRecoveryState("idle");
+    }
   }
 
   function beginHistoryRequest() {
-    retireHistoryOwnership();
+    retireHistoryOwnership(true);
     const controller = new AbortController();
     const generation = historyGeneration.current;
     historyRequestController.current = controller;
@@ -473,6 +478,10 @@ export function EntryExperience({
     async function refreshHistory() {
       const request = beginHistoryRequest();
       controller = request.controller;
+      setOlderCursor(null);
+      setNewerCursor(null);
+      setAdjacentError(null);
+      setHistoryState("loading");
       try {
         const page = await loadHistoryEntries(
           accessToken,
@@ -492,6 +501,7 @@ export function EntryExperience({
         setOlderCursor(page.older_cursor);
         setNewerCursor(page.newer_cursor);
         setHistoryState("ready");
+        setHistoryRecovery(null);
       } catch {
         if (
           current &&
@@ -826,7 +836,7 @@ export function EntryExperience({
           : entries.find((entry) => entry.id === readingEntryId);
       recovery = {
         anchorDate: readingEntry?.owner_date ?? changed.owner_date,
-        anchorEntryId: readingEntry?.id ?? changed.id,
+        activeEntryId: changed.id,
         readingAnchor,
         targetEntryCount: Math.max(
           HISTORY_PAGE_LIMIT,
@@ -839,7 +849,7 @@ export function EntryExperience({
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
         recovery.anchorDate,
-        recovery.anchorEntryId,
+        recovery.activeEntryId,
         recovery.targetEntryCount,
         rebuildRequest.controller.signal,
       );
@@ -875,6 +885,7 @@ export function EntryExperience({
         setEntries((current) => mergeEntries(current, [committedEntry]));
         setOlderCursor(null);
         setNewerCursor(null);
+        setHistoryState("ready");
         setHistoryRecovery(recovery);
         setSavedEntry((current) =>
           current?.id === committedEntry.id ? committedEntry : current
@@ -911,13 +922,13 @@ export function EntryExperience({
     }
 
     const recovery = historyRecovery;
-    setHistoryRecoveryState("loading");
     const request = beginHistoryRequest();
+    setHistoryRecoveryState("loading");
     try {
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
         recovery.anchorDate,
-        recovery.anchorEntryId,
+        recovery.activeEntryId,
         recovery.targetEntryCount,
         request.controller.signal,
       );
@@ -1095,6 +1106,11 @@ export function EntryExperience({
     setHistoryRequestVersion((current) => current + 1);
   }
 
+  function retryHistory() {
+    setHistoryState("loading");
+    setHistoryRequestVersion((current) => current + 1);
+  }
+
   const groups = groupEntries(entries);
   const displayedGroups =
     anchorDate && !groups.some((group) => group.date === anchorDate)
@@ -1175,9 +1191,18 @@ export function EntryExperience({
         {historyState === "loading" ? (
           <p role="status">Loading Diary history…</p>
         ) : historyState === "unavailable" ? (
-          <p className="diary-auth-error" role="alert">
-            Diary could not load history.
-          </p>
+          <div>
+            <p className="diary-auth-error" role="alert">
+              Diary could not load history.
+            </p>
+            <button
+              className="diary-secondary-action"
+              onClick={retryHistory}
+              type="button"
+            >
+              Retry History
+            </button>
+          </div>
         ) : (
           <div className="diary-history-groups">
             {displayedGroups.map((group) => {

@@ -416,6 +416,12 @@ test("committed Entry Time change disables stale cursors until fresh History rec
     });
   });
 
+  const readingEntry = entry(
+    "entry-time-recovery-reading",
+    "2026-07-29",
+    "2026-07-29T05:00:00.123456Z",
+    "Preserved reading anchor distinct from the changed Entry.",
+  );
   const movingBefore = entry(
     "entry-time-recovery-moving",
     "2026-07-29",
@@ -438,7 +444,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
       `Fresh recovery rank ${rank + 1}.`,
     )
   );
-  const recoveryTailEntries = Array.from({ length: 19 }, (_, rank) =>
+  const recoveryTailEntries = Array.from({ length: 18 }, (_, rank) =>
     entry(
       `entry-time-recovery-tail-${rank}`,
       "2026-07-28",
@@ -469,6 +475,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
             {
               date: "2026-07-29",
               entries: [
+                readingEntry,
                 movingBefore,
                 entry(
                   "entry-time-recovery-old-sentinel",
@@ -526,11 +533,11 @@ test("committed Entry Time change disables stale cursors until fresh History rec
     const responseBody =
       cursor === "new-snapshot-search-2"
         ? {
-            anchor_date: "2026-07-28",
+            anchor_date: "2026-07-29",
             groups: [
               {
                 date: "2026-07-28",
-                entries: denseRecoveryEntries.slice(20),
+                entries: denseRecoveryEntries.slice(19, 39),
               },
             ],
             newer_cursor: "new-snapshot-newer",
@@ -538,11 +545,15 @@ test("committed Entry Time change disables stale cursors until fresh History rec
           }
         : cursor === "new-snapshot-search-3"
           ? {
-              anchor_date: "2026-07-28",
+              anchor_date: "2026-07-29",
               groups: [
                 {
                   date: "2026-07-28",
-                  entries: [movingAfter, ...recoveryTailEntries],
+                  entries: [
+                    ...denseRecoveryEntries.slice(39),
+                    movingAfter,
+                    ...recoveryTailEntries,
+                  ],
                 },
               ],
               newer_cursor: "new-snapshot-newer",
@@ -550,7 +561,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
             }
           : cursor === "new-snapshot-newer"
             ? {
-                anchor_date: "2026-07-28",
+                anchor_date: "2026-07-29",
                 groups: [
                   {
                     date: "2026-07-30",
@@ -569,7 +580,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
               }
             : cursor === "new-snapshot-older-next"
               ? {
-                  anchor_date: "2026-07-28",
+                  anchor_date: "2026-07-29",
                   groups: [
                     {
                       date: "2026-07-26",
@@ -587,11 +598,15 @@ test("committed Entry Time change disables stale cursors until fresh History rec
                   older_cursor: null,
                 }
             : {
-                anchor_date: "2026-07-28",
+                anchor_date: "2026-07-29",
                 groups: [
                   {
+                    date: "2026-07-29",
+                    entries: [readingEntry],
+                  },
+                  {
                     date: "2026-07-28",
-                    entries: denseRecoveryEntries.slice(0, 20),
+                    entries: denseRecoveryEntries.slice(0, 19),
                   },
                 ],
                 newer_cursor: "new-snapshot-newer",
@@ -619,12 +634,14 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   });
 
   await page.goto("diary.html?date=2026-07-29");
+  const readingCard = page.locator("#entry-entry-time-recovery-reading");
   const movingEntry = page.locator("#entry-entry-time-recovery-moving");
+  await expect(readingCard).toBeVisible();
   await expect(movingEntry).toBeVisible();
-  await movingEntry.evaluate((element) => {
+  await readingCard.evaluate((element) => {
     element.scrollIntoView({ block: "start" });
   });
-  const topBefore = await movingEntry.evaluate(
+  const topBefore = await readingCard.evaluate(
     (element) => element.getBoundingClientRect().top,
   );
   await movingEntry.getByText("Entry actions", { exact: true }).click();
@@ -671,7 +688,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await expect(page.locator("article.diary-entry")).toHaveCount(60);
   await expect
     .poll(() =>
-      movingEntry.evaluate((element) => element.getBoundingClientRect().top),
+      readingCard.evaluate((element) => element.getBoundingClientRect().top),
     )
     .toBeCloseTo(topBefore, 0);
 
@@ -701,6 +718,244 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await expect(movingEntry).toHaveCount(1);
   await expect(movingEntry.locator("dd").first()).toContainText("Jul");
 });
+
+for (const rootOutcome of ["success", "failure"] as const) {
+  const adjacentDirection = rootOutcome === "success" ? "older" : "newer";
+  test(`delayed ${adjacentDirection} load retires at midnight root ${rootOutcome}`, async ({
+    page,
+  }) => {
+    const beforeMidnight = new Date("2026-07-30T23:00:00+08:00");
+    await page.clock.install({ time: beforeMidnight });
+    await page.clock.pauseAt(beforeMidnight);
+    const accessToken = unsignedAccessToken(ownerId);
+    await page.addInitScript(
+      ({ ownerAccessToken, userId }) => {
+        window.localStorage.setItem(
+          "sb-127-auth-token",
+          JSON.stringify({
+            access_token: ownerAccessToken,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expires_in: 3600,
+            refresh_token: `midnight-adjacent-${userId}`,
+            token_type: "bearer",
+            user: {
+              app_metadata: {},
+              aud: "authenticated",
+              created_at: new Date().toISOString(),
+              id: userId,
+              user_metadata: {},
+            },
+          }),
+        );
+      },
+      { ownerAccessToken: accessToken, userId: ownerId },
+    );
+    await page.route("**/health", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { service: "diary-api", status: "ready" },
+        status: 200,
+      });
+    });
+    await page.route("**/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { owner_id: ownerId, status: "authenticated" },
+        status: 200,
+      });
+    });
+
+    const initialEntry = entry(
+      `midnight-adjacent-initial-${rootOutcome}`,
+      "2026-07-30",
+      "2026-07-30T12:00:00+08:00",
+      `Initial History before midnight ${rootOutcome}.`,
+    );
+    const freshRootEntry = entry(
+      `midnight-adjacent-fresh-${rootOutcome}`,
+      "2026-07-31",
+      "2026-07-31T00:00:00+08:00",
+      `Fresh root after midnight ${rootOutcome}.`,
+    );
+    const freshAdjacentEntry = entry(
+      `midnight-adjacent-continuation-${rootOutcome}`,
+      adjacentDirection === "older" ? "2026-07-29" : "2026-08-01",
+      adjacentDirection === "older"
+        ? "2026-07-29T12:00:00+08:00"
+        : "2026-08-01T12:00:00+08:00",
+      `Fresh ${adjacentDirection} continuation after midnight.`,
+    );
+    let releaseStaleAdjacent!: () => void;
+    const staleAdjacentRelease = new Promise<void>((resolve) => {
+      releaseStaleAdjacent = resolve;
+    });
+    let markStaleAdjacentStarted!: () => void;
+    const staleAdjacentStarted = new Promise<void>((resolve) => {
+      markStaleAdjacentStarted = resolve;
+    });
+    let markStaleAdjacentSettled!: () => void;
+    const staleAdjacentSettled = new Promise<void>((resolve) => {
+      markStaleAdjacentSettled = resolve;
+    });
+    let midnightTakeoverStarted = false;
+    let midnightFailureReturned = false;
+    const historyRequests: URL[] = [];
+
+    await page.route("**/entries/history**", async (route) => {
+      const url = new URL(route.request().url());
+      historyRequests.push(url);
+      const cursor = url.searchParams.get("cursor");
+      if (cursor === `old-${adjacentDirection}`) {
+        markStaleAdjacentStarted();
+        await staleAdjacentRelease;
+        try {
+          await route.fulfill({
+            contentType: "application/json",
+            json: {
+              anchor_date: "2026-07-30",
+              groups: [
+                {
+                  date: "2026-07-28",
+                  entries: [
+                    entry(
+                      `midnight-adjacent-stale-${rootOutcome}`,
+                      "2026-07-28",
+                      "2026-07-28T12:00:00+08:00",
+                      "Stale adjacent response must not install.",
+                    ),
+                  ],
+                },
+              ],
+              newer_cursor: "old-newer",
+              older_cursor: "old-older",
+            },
+            status: 200,
+          });
+        } catch {
+          // The midnight root is expected to abort this transport.
+        } finally {
+          markStaleAdjacentSettled();
+        }
+        return;
+      }
+      if (cursor === `fresh-${adjacentDirection}`) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-31",
+            groups: [
+              {
+                date: freshAdjacentEntry.owner_date,
+                entries: [freshAdjacentEntry],
+              },
+            ],
+            newer_cursor: null,
+            older_cursor: null,
+          },
+          status: 200,
+        });
+        return;
+      }
+      expect(cursor).toBeNull();
+      if (!midnightTakeoverStarted) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-30",
+            groups: [
+              { date: "2026-07-30", entries: [initialEntry] },
+            ],
+            newer_cursor: "old-newer",
+            older_cursor: "old-older",
+          },
+          status: 200,
+        });
+        return;
+      }
+      if (rootOutcome === "failure" && !midnightFailureReturned) {
+        midnightFailureReturned = true;
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "midnight root temporarily unavailable" },
+          status: 503,
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-31",
+          groups: [
+            { date: "2026-07-31", entries: [freshRootEntry] },
+          ],
+          newer_cursor: "fresh-newer",
+          older_cursor: "fresh-older",
+        },
+        status: 200,
+      });
+    });
+
+    await page.goto("diary.html");
+    await expect(page.locator(`#entry-${initialEntry.id}`)).toBeVisible();
+    await page
+      .getByRole("button", {
+        name: `Load ${adjacentDirection} Entries`,
+      })
+      .click();
+    await staleAdjacentStarted;
+    const takeoverRequestStart = historyRequests.length;
+    midnightTakeoverStarted = true;
+    await page.clock.runFor(3_601_000);
+
+    if (rootOutcome === "success") {
+      await expect(page.locator(`#entry-${freshRootEntry.id}`)).toBeVisible();
+    } else {
+      await expect(page.getByRole("alert")).toContainText(
+        "Diary could not load history.",
+      );
+      await expect(
+        page.getByRole("button", { name: "Retry History" }),
+      ).toBeVisible();
+    }
+    await expect(
+      page.getByText(`Loading ${adjacentDirection} Entries`),
+    ).toHaveCount(0);
+
+    releaseStaleAdjacent();
+    await staleAdjacentSettled;
+    await expect(
+      page.getByText("Stale adjacent response must not install."),
+    ).toHaveCount(0);
+
+    if (rootOutcome === "failure") {
+      await page.getByRole("button", { name: "Retry History" }).click();
+      await expect(page.locator(`#entry-${freshRootEntry.id}`)).toBeVisible();
+    }
+
+    const freshLoad = page.getByRole("button", {
+      name: `Load ${adjacentDirection} Entries`,
+    });
+    await expect(freshLoad).toBeEnabled();
+    await freshLoad.click();
+    await expect(
+      page.locator(`#entry-${freshAdjacentEntry.id}`),
+    ).toBeVisible();
+    expect(
+      historyRequests
+        .slice(takeoverRequestStart)
+        .some((url) =>
+          url.searchParams.get("cursor")?.startsWith("old-"),
+        ),
+    ).toBe(false);
+    expect(
+      historyRequests.filter(
+        (url) =>
+          url.searchParams.get("cursor") ===
+          `fresh-${adjacentDirection}`,
+      ),
+    ).toHaveLength(1);
+  });
+}
 
 for (const rebuildOutcome of ["success", "recovery"] as const) {
   test(`delayed root refresh cannot overwrite ${rebuildOutcome} after Entry Time commit`, async ({
