@@ -695,6 +695,216 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await expect(movingEntry.locator("dd").first()).toContainText("Jul");
 });
 
+for (const rebuildOutcome of ["success", "recovery"] as const) {
+  test(`delayed root refresh cannot overwrite ${rebuildOutcome} after Entry Time commit`, async ({
+    page,
+  }) => {
+    const beforeMidnight = new Date("2026-07-30T23:59:59+08:00");
+    await page.clock.install({ time: beforeMidnight });
+    await page.clock.pauseAt(beforeMidnight);
+    const accessToken = unsignedAccessToken(ownerId);
+    await page.addInitScript(
+      ({ ownerAccessToken, userId }) => {
+        window.localStorage.setItem(
+          "sb-127-auth-token",
+          JSON.stringify({
+            access_token: ownerAccessToken,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expires_in: 3600,
+            refresh_token: `delayed-root-${userId}`,
+            token_type: "bearer",
+            user: {
+              app_metadata: {},
+              aud: "authenticated",
+              created_at: new Date().toISOString(),
+              id: userId,
+              user_metadata: {},
+            },
+          }),
+        );
+      },
+      { ownerAccessToken: accessToken, userId: ownerId },
+    );
+    await page.route("**/health", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { service: "diary-api", status: "ready" },
+        status: 200,
+      });
+    });
+    await page.route("**/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { owner_id: ownerId, status: "authenticated" },
+        status: 200,
+      });
+    });
+    await page.route("**/entries/calendar**", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          days: [
+            { date: "2026-07-30", entry_count: 0 },
+            { date: "2026-07-29", entry_count: 1 },
+          ],
+          month: "2026-07",
+          time_zone: "Asia/Taipei",
+        },
+        status: 200,
+      });
+    });
+
+    const movingBefore = entry(
+      `delayed-root-moving-${rebuildOutcome}`,
+      "2026-07-30",
+      "2026-07-30T12:00:00+08:00",
+      `Delayed root ${rebuildOutcome} anchor.`,
+    );
+    const movingAfter = {
+      ...movingBefore,
+      entry_at: "2026-07-29T09:00:00+08:00",
+      owner_date: "2026-07-29",
+    };
+    let markOldRootStarted!: () => void;
+    const oldRootStarted = new Promise<void>((resolve) => {
+      markOldRootStarted = resolve;
+    });
+    let releaseOldRoot!: () => void;
+    const oldRootRelease = new Promise<void>((resolve) => {
+      releaseOldRoot = resolve;
+    });
+    let markOldRootSettled!: () => void;
+    const oldRootSettled = new Promise<void>((resolve) => {
+      markOldRootSettled = resolve;
+    });
+    let cursorlessRequests = 0;
+    const historyRequests: URL[] = [];
+
+    await page.route("**/entries/*/entry-time", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: movingAfter,
+        status: 200,
+      });
+    });
+    await page.route("**/entries/history**", async (route) => {
+      const url = new URL(route.request().url());
+      historyRequests.push(url);
+      const cursor = url.searchParams.get("cursor");
+      if (cursor) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-29",
+            groups: [],
+            newer_cursor: null,
+            older_cursor: null,
+          },
+          status: 200,
+        });
+        return;
+      }
+
+      cursorlessRequests += 1;
+      if (cursorlessRequests === 2) {
+        markOldRootStarted();
+        await oldRootRelease;
+        try {
+          await route.fulfill({
+            contentType: "application/json",
+            json: {
+              anchor_date: "2026-07-30",
+              groups: [{ date: "2026-07-30", entries: [movingBefore] }],
+              newer_cursor: "old-root-newer",
+              older_cursor: "old-root-older",
+            },
+            status: 200,
+          });
+        } catch {
+          // Aborting the old generation is the preferred isolation path.
+        } finally {
+          markOldRootSettled();
+        }
+        return;
+      }
+
+      if (cursorlessRequests === 3 && rebuildOutcome === "recovery") {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "fresh snapshot unavailable" },
+          status: 503,
+        });
+        return;
+      }
+
+      const isFresh = cursorlessRequests >= 3;
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: isFresh ? "2026-07-29" : "2026-07-30",
+          groups: [
+            {
+              date: isFresh ? "2026-07-29" : "2026-07-30",
+              entries: [isFresh ? movingAfter : movingBefore],
+            },
+          ],
+          newer_cursor: isFresh ? "new-root-newer" : "old-root-newer",
+          older_cursor: isFresh ? "new-root-older" : "old-root-older",
+        },
+        status: 200,
+      });
+    });
+
+    await page.goto("diary.html");
+    const movingEntry = page.locator(`#entry-${movingBefore.id}`);
+    await expect(movingEntry).toBeVisible();
+    await movingEntry.getByText("Entry actions", { exact: true }).click();
+    await movingEntry
+      .getByRole("button", { name: "Change Entry Time" })
+      .click();
+    const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+    await editor.getByLabel("New Entry Time").fill("2026-07-29T09:00");
+
+    await page.clock.runFor(2_000);
+    await oldRootStarted;
+    await editor.getByRole("button", { name: "Save Entry Time" }).click();
+    await expect(editor).not.toBeVisible();
+    if (rebuildOutcome === "success") {
+      await expect(
+        movingEntry.locator("xpath=ancestor::section[1]").getByRole("heading", {
+          name: "2026-07-29",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
+    } else {
+      await expect(page.getByRole("button", { name: "Refresh History" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Load newer Entries" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Load older Entries" })).toHaveCount(0);
+    }
+
+    releaseOldRoot();
+    await oldRootSettled;
+    await expect(
+      movingEntry.locator("xpath=ancestor::section[1]").getByRole("heading", {
+        name: "2026-07-29",
+        exact: true,
+      }),
+    ).toBeVisible();
+    if (rebuildOutcome === "recovery") {
+      await expect(page.getByRole("button", { name: "Load newer Entries" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Load older Entries" })).toHaveCount(0);
+    } else {
+      const loadOlder = page.getByRole("button", { name: "Load older Entries" });
+      await expect(loadOlder).toBeVisible();
+      await loadOlder.click();
+      expect(historyRequests.at(-1)?.searchParams.get("cursor")).toBe(
+        "new-root-older",
+      );
+    }
+  });
+}
+
 test("distinct Entry Times within one millisecond keep full precision", async ({
   page,
 }) => {
