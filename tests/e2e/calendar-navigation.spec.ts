@@ -536,6 +536,152 @@ test("calendar jump isolates the new History from an in-flight adjacent request"
   ).toBe(true);
 });
 
+test("calendar jump retires Entry Time History recovery for the old date", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-07-30T12:00:00+08:00"));
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: "calendar-retires-recovery-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+
+  const movingBefore = entry(
+    "calendar-recovery-moving",
+    "2026-07-30",
+    "2026-07-30T12:00:00+08:00",
+    "Calendar recovery must be retired.",
+  );
+  const movingAfter = {
+    ...movingBefore,
+    entry_at: "2026-07-29T09:00:00+08:00",
+    owner_date: "2026-07-29",
+  };
+  const selectedEntry = entry(
+    "calendar-selected-entry",
+    "2026-07-27",
+    "2026-07-27T12:00:00+08:00",
+    "History owned by the newly selected Calendar date.",
+  );
+  let mutationCommitted = false;
+  const historyRequests: URL[] = [];
+  await page.route("**/entries/*/entry-time", async (route) => {
+    mutationCommitted = true;
+    await route.fulfill({
+      contentType: "application/json",
+      json: movingAfter,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    const url = new URL(route.request().url());
+    historyRequests.push(url);
+    if (
+      mutationCommitted &&
+      url.searchParams.get("anchor_date") === "2026-07-27"
+    ) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-27",
+          groups: [{ date: "2026-07-27", entries: [selectedEntry] }],
+          newer_cursor: "selected-date-newer",
+          older_cursor: "selected-date-older",
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (mutationCommitted) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { detail: "old-date rebuild unavailable" },
+        status: 503,
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-30",
+        groups: [{ date: "2026-07-30", entries: [movingBefore] }],
+        newer_cursor: "old-date-newer",
+        older_cursor: "old-date-older",
+      },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/calendar?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        days: [{ date: "2026-07-27", entry_count: 1 }],
+        month: "2026-07",
+        time_zone: "Asia/Taipei",
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html?date=2026-07-30");
+  const movingEntry = page.locator("#entry-calendar-recovery-moving");
+  await expect(movingEntry).toBeVisible();
+  await movingEntry.getByText("Entry actions", { exact: true }).click();
+  await movingEntry
+    .getByRole("button", { name: "Change Entry Time" })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+  await editor.getByLabel("New Entry Time").fill("2026-07-29T09:00");
+  await editor.getByRole("button", { name: "Save Entry Time" }).click();
+  await expect(page.getByRole("button", { name: "Refresh History" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Calendar" }).click();
+  await page
+    .getByRole("button", { name: "July 27, 2026, 1 Entry" })
+    .click();
+  await expect(page).toHaveURL(/\?date=2026-07-27$/);
+  await expect(
+    page.getByText("History owned by the newly selected Calendar date."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
+  await expect(page.getByText("Calendar recovery must be retired.")).toHaveCount(0);
+  expect(
+    historyRequests.at(-1)?.searchParams.get("anchor_date"),
+  ).toBe("2026-07-27");
+});
+
 test("Calendar updates Taipei Today across midnight without stealing a browsed month", async ({
   page,
 }) => {

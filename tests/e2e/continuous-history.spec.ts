@@ -430,6 +430,22 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   let mutationCommitted = false;
   let freshRebuildAttempts = 0;
   const historyRequests: URL[] = [];
+  const denseRecoveryEntries = Array.from({ length: 40 }, (_, rank) =>
+    entry(
+      `entry-time-recovery-rank-${rank}`,
+      "2026-07-28",
+      `2026-07-28T12:${String(59 - rank).padStart(2, "0")}:00Z`,
+      `Fresh recovery rank ${rank + 1}.`,
+    )
+  );
+  const recoveryTailEntries = Array.from({ length: 19 }, (_, rank) =>
+    entry(
+      `entry-time-recovery-tail-${rank}`,
+      "2026-07-28",
+      `2026-07-28T00:${String(59 - rank).padStart(2, "0")}:00Z`,
+      `Fresh recovery tail ${rank + 1}.`,
+    )
+  );
 
   await page.route("**/entries/*/entry-time", async (route) => {
     mutationCommitted = true;
@@ -508,87 +524,78 @@ test("committed Entry Time change disables stale cursors until fresh History rec
 
     freshRebuildAttempts += 1;
     const responseBody =
-      cursor === "new-snapshot-older"
+      cursor === "new-snapshot-search-2"
         ? {
             anchor_date: "2026-07-28",
             groups: [
               {
-                date: "2026-07-27",
-                entries: [
-                  entry(
-                    "entry-time-recovery-older-one",
-                    "2026-07-27",
-                    "2026-07-27T03:00:00Z",
-                    "Fresh snapshot older one.",
-                  ),
-                  entry(
-                    "entry-time-recovery-older-two",
-                    "2026-07-27",
-                    "2026-07-27T02:00:00Z",
-                    "Fresh snapshot older two.",
-                  ),
-                ],
+                date: "2026-07-28",
+                entries: denseRecoveryEntries.slice(20),
               },
             ],
             newer_cursor: "new-snapshot-newer",
-            older_cursor: "new-snapshot-older-next",
+            older_cursor: "new-snapshot-search-3",
           }
-        : cursor === "new-snapshot-newer"
+        : cursor === "new-snapshot-search-3"
           ? {
               anchor_date: "2026-07-28",
               groups: [
                 {
-                  date: "2026-07-30",
-                  entries: [
-                    entry(
-                      "entry-time-recovery-newer",
-                      "2026-07-30",
-                      "2026-07-30T03:00:00Z",
-                      "Fresh snapshot newer page.",
-                    ),
-                  ],
+                  date: "2026-07-28",
+                  entries: [movingAfter, ...recoveryTailEntries],
                 },
               ],
-              newer_cursor: null,
+              newer_cursor: "new-snapshot-newer",
               older_cursor: "new-snapshot-older-next",
             }
-          : cursor === "new-snapshot-older-next"
+          : cursor === "new-snapshot-newer"
             ? {
                 anchor_date: "2026-07-28",
                 groups: [
                   {
-                    date: "2026-07-26",
+                    date: "2026-07-30",
                     entries: [
                       entry(
-                        "entry-time-recovery-oldest",
-                        "2026-07-26",
-                        "2026-07-26T03:00:00Z",
-                        "Fresh snapshot oldest page.",
+                        "entry-time-recovery-newer",
+                        "2026-07-30",
+                        "2026-07-30T03:00:00Z",
+                        "Fresh snapshot newer page.",
                       ),
                     ],
                   },
                 ],
                 newer_cursor: null,
-                older_cursor: null,
+                older_cursor: "new-snapshot-older-next",
               }
+            : cursor === "new-snapshot-older-next"
+              ? {
+                  anchor_date: "2026-07-28",
+                  groups: [
+                    {
+                      date: "2026-07-26",
+                      entries: [
+                        entry(
+                          "entry-time-recovery-oldest",
+                          "2026-07-26",
+                          "2026-07-26T03:00:00Z",
+                          "Fresh snapshot oldest page.",
+                        ),
+                      ],
+                    },
+                  ],
+                  newer_cursor: null,
+                  older_cursor: null,
+                }
             : {
                 anchor_date: "2026-07-28",
                 groups: [
                   {
                     date: "2026-07-28",
-                    entries: [
-                      movingAfter,
-                      entry(
-                        "entry-time-recovery-new-sentinel",
-                        "2026-07-28",
-                        "2026-07-28T00:00:00Z",
-                        "New date sentinel.",
-                      ),
-                    ],
+                    entries: denseRecoveryEntries.slice(0, 20),
                   },
                 ],
                 newer_cursor: "new-snapshot-newer",
-                older_cursor: "new-snapshot-older",
+                older_cursor: "new-snapshot-search-2",
               };
     await route.fulfill({
       contentType: "application/json",
@@ -661,7 +668,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   const recoveryRequestStart = historyRequests.length;
   await page.getByRole("button", { name: "Refresh History" }).click();
   await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
-  await expect(page.locator("article.diary-entry")).toHaveCount(4);
+  await expect(page.locator("article.diary-entry")).toHaveCount(60);
   await expect
     .poll(() =>
       movingEntry.evaluate((element) => element.getBoundingClientRect().top),
@@ -674,7 +681,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await expect(page.getByText("Fresh snapshot oldest page.")).toBeVisible();
 
   const recoveryRequests = historyRequests.slice(recoveryRequestStart);
-  expect(recoveryRequests.length).toBe(4);
+  expect(recoveryRequests.length).toBe(5);
   expect(
     recoveryRequests.every(
       (url) => Number(url.searchParams.get("limit") ?? "20") <= 20,
@@ -777,10 +784,13 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
     const oldRootSettled = new Promise<void>((resolve) => {
       markOldRootSettled = resolve;
     });
-    let cursorlessRequests = 0;
+    let delayNextRoot = false;
+    let mutationCommitted = false;
+    let freshRebuildAttempted = false;
     const historyRequests: URL[] = [];
 
     await page.route("**/entries/*/entry-time", async (route) => {
+      mutationCommitted = true;
       await route.fulfill({
         contentType: "application/json",
         json: movingAfter,
@@ -805,8 +815,8 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
         return;
       }
 
-      cursorlessRequests += 1;
-      if (cursorlessRequests === 2) {
+      if (delayNextRoot) {
+        delayNextRoot = false;
         markOldRootStarted();
         await oldRootRelease;
         try {
@@ -828,7 +838,12 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
         return;
       }
 
-      if (cursorlessRequests === 3 && rebuildOutcome === "recovery") {
+      if (
+        mutationCommitted &&
+        !freshRebuildAttempted &&
+        rebuildOutcome === "recovery"
+      ) {
+        freshRebuildAttempted = true;
         await route.fulfill({
           contentType: "application/json",
           json: { detail: "fresh snapshot unavailable" },
@@ -837,7 +852,8 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
         return;
       }
 
-      const isFresh = cursorlessRequests >= 3;
+      const isFresh = mutationCommitted;
+      freshRebuildAttempted ||= isFresh;
       await route.fulfill({
         contentType: "application/json",
         json: {
@@ -865,6 +881,7 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
     const editor = page.getByRole("dialog", { name: "Change Entry Time" });
     await editor.getByLabel("New Entry Time").fill("2026-07-29T09:00");
 
+    delayNextRoot = true;
     await page.clock.runFor(2_000);
     await oldRootStarted;
     await editor.getByRole("button", { name: "Save Entry Time" }).click();
@@ -895,12 +912,16 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
       await expect(page.getByRole("button", { name: "Load newer Entries" })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Load older Entries" })).toHaveCount(0);
     } else {
-      const loadOlder = page.getByRole("button", { name: "Load older Entries" });
-      await expect(loadOlder).toBeVisible();
-      await loadOlder.click();
-      expect(historyRequests.at(-1)?.searchParams.get("cursor")).toBe(
-        "new-root-older",
-      );
+      expect(
+        historyRequests.some(
+          (url) => url.searchParams.get("cursor") === "new-root-older",
+        ),
+      ).toBe(true);
+      expect(
+        historyRequests.some((url) =>
+          url.searchParams.get("cursor")?.startsWith("old-root"),
+        ),
+      ).toBe(false);
     }
   });
 }

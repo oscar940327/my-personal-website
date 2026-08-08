@@ -54,6 +54,8 @@ type HistoryRecovery = {
 };
 
 const HISTORY_PAGE_LIMIT = 20;
+const HISTORY_REBUILD_ENTRY_LIMIT = HISTORY_PAGE_LIMIT * 3;
+const HISTORY_ANCHOR_SEARCH_PAGE_LIMIT = 5;
 
 function asTaipeiIso(inputValue: string): string {
   return `${inputValue}:00+08:00`;
@@ -170,16 +172,16 @@ async function rebuildHistoryWindow(
   let olderCursor = initialPage.older_cursor;
   let newerCursor = initialPage.newer_cursor;
   const requestedCursors = new Set<string>();
-  const requestLimit = Math.max(
-    1,
-    Math.ceil(targetEntryCount / HISTORY_PAGE_LIMIT) + 1,
+  const boundedTargetEntryCount = Math.max(
+    HISTORY_PAGE_LIMIT,
+    Math.min(targetEntryCount, HISTORY_REBUILD_ENTRY_LIMIT),
   );
   let requestCount = 1;
 
   while (
-    (rebuiltEntries.length < targetEntryCount ||
+    (rebuiltEntries.length < boundedTargetEntryCount ||
       !rebuiltEntries.some((entry) => entry.id === anchorEntryId)) &&
-    requestCount < requestLimit
+    requestCount < HISTORY_ANCHOR_SEARCH_PAGE_LIMIT
   ) {
     const direction: HistoryDirection | null = olderCursor
       ? "older"
@@ -398,12 +400,48 @@ export function EntryExperience({
   const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
   const entryTimeReadingAnchor = useRef<ReadingAnchor | null>(null);
   const pendingHistoryAnchor = useRef<ReadingAnchor | null>(null);
-  const adjacentController = useRef<AbortController | null>(null);
+  const historyRequestController = useRef<AbortController | null>(null);
   const revisionHistoryController = useRef<AbortController | null>(null);
   const historyGeneration = useRef(0);
   const newerBoundary = useRef<HTMLDivElement>(null);
   const olderBoundary = useRef<HTMLDivElement>(null);
   const userScrolledHistory = useRef(false);
+
+  function retireHistoryOwnership() {
+    historyGeneration.current += 1;
+    historyRequestController.current?.abort();
+    historyRequestController.current = null;
+  }
+
+  function beginHistoryRequest() {
+    retireHistoryOwnership();
+    const controller = new AbortController();
+    const generation = historyGeneration.current;
+    historyRequestController.current = controller;
+    return { controller, generation };
+  }
+
+  function ownsHistoryRequest(
+    controller: AbortController,
+    generation: number,
+  ) {
+    return (
+      !controller.signal.aborted &&
+      historyRequestController.current === controller &&
+      historyGeneration.current === generation
+    );
+  }
+
+  function finishHistoryRequest(
+    controller: AbortController,
+    generation: number,
+  ) {
+    if (!ownsHistoryRequest(controller, generation)) {
+      return false;
+    }
+    historyRequestController.current = null;
+    return true;
+  }
 
   useLayoutEffect(() => {
     const anchor = pendingHistoryAnchor.current;
@@ -433,8 +471,8 @@ export function EntryExperience({
     }
 
     async function refreshHistory() {
-      controller?.abort();
-      controller = new AbortController();
+      const request = beginHistoryRequest();
+      controller = request.controller;
       try {
         const page = await loadHistoryEntries(
           accessToken,
@@ -443,7 +481,10 @@ export function EntryExperience({
           },
           controller.signal,
         );
-        if (!current) {
+        if (
+          !current ||
+          !ownsHistoryRequest(request.controller, request.generation)
+        ) {
           return;
         }
         setAnchorDate(page.anchor_date);
@@ -452,10 +493,14 @@ export function EntryExperience({
         setNewerCursor(page.newer_cursor);
         setHistoryState("ready");
       } catch {
-        if (current) {
+        if (
+          current &&
+          ownsHistoryRequest(request.controller, request.generation)
+        ) {
           setHistoryState("unavailable");
         }
       } finally {
+        finishHistoryRequest(request.controller, request.generation);
         scheduleMidnightRefresh();
       }
     }
@@ -463,7 +508,14 @@ export function EntryExperience({
     void refreshHistory();
     return () => {
       current = false;
-      controller?.abort();
+      if (
+        controller &&
+        historyRequestController.current === controller
+      ) {
+        retireHistoryOwnership();
+      } else {
+        controller?.abort();
+      }
       if (midnightTimer !== null) {
         window.clearTimeout(midnightTimer);
       }
@@ -544,17 +596,15 @@ export function EntryExperience({
     if (
       !cursor ||
       adjacentLoad !== null ||
-      adjacentController.current !== null
+      historyRequestController.current !== null
     ) {
       return;
     }
 
-    const generation = historyGeneration.current;
+    const request = beginHistoryRequest();
     pendingHistoryAnchor.current = captureReadingAnchor();
     setAdjacentError(null);
     setAdjacentLoad(direction);
-    const controller = new AbortController();
-    adjacentController.current = controller;
     try {
       const page = await loadHistoryEntries(
         accessToken,
@@ -562,12 +612,9 @@ export function EntryExperience({
           cursor,
           direction,
         },
-        controller.signal,
+        request.controller.signal,
       );
-      if (
-        controller.signal.aborted ||
-        generation !== historyGeneration.current
-      ) {
+      if (!ownsHistoryRequest(request.controller, request.generation)) {
         return;
       }
       setEntries((current) =>
@@ -579,10 +626,7 @@ export function EntryExperience({
         setNewerCursor(page.newer_cursor);
       }
     } catch {
-      if (
-        controller.signal.aborted ||
-        generation !== historyGeneration.current
-      ) {
+      if (!ownsHistoryRequest(request.controller, request.generation)) {
         return;
       }
       pendingHistoryAnchor.current = null;
@@ -590,10 +634,7 @@ export function EntryExperience({
         `Diary could not load ${direction} Entries. Try again.`,
       );
     } finally {
-      if (adjacentController.current === controller) {
-        adjacentController.current = null;
-      }
-      if (generation === historyGeneration.current) {
+      if (finishHistoryRequest(request.controller, request.generation)) {
         setAdjacentLoad(null);
       }
     }
@@ -766,6 +807,7 @@ export function EntryExperience({
     setEntryTimeError(null);
     let changedEntry: EntryRecord | null = null;
     let recovery: HistoryRecovery | null = null;
+    let rebuildRequest: ReturnType<typeof beginHistoryRequest> | null = null;
     try {
       const changed = await changeEntryTime(
         accessToken,
@@ -786,21 +828,29 @@ export function EntryExperience({
         anchorDate: readingEntry?.owner_date ?? changed.owner_date,
         anchorEntryId: readingEntry?.id ?? changed.id,
         readingAnchor,
-        targetEntryCount: entries.length,
+        targetEntryCount: Math.max(
+          HISTORY_PAGE_LIMIT,
+          Math.min(entries.length, HISTORY_REBUILD_ENTRY_LIMIT),
+        ),
       };
-      historyGeneration.current += 1;
-      adjacentController.current?.abort();
-      adjacentController.current = null;
       setAdjacentLoad(null);
       setAdjacentError(null);
-      const controller = new AbortController();
+      rebuildRequest = beginHistoryRequest();
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
         recovery.anchorDate,
         recovery.anchorEntryId,
         recovery.targetEntryCount,
-        controller.signal,
+        rebuildRequest.controller.signal,
       );
+      if (
+        !ownsHistoryRequest(
+          rebuildRequest.controller,
+          rebuildRequest.generation,
+        )
+      ) {
+        return;
+      }
       pendingHistoryAnchor.current = readingAnchor;
       setEntries(rebuilt.entries);
       setOlderCursor(rebuilt.olderCursor);
@@ -814,7 +864,13 @@ export function EntryExperience({
       entryTimeReadingAnchor.current = null;
       setCalendarRequestVersion((current) => current + 1);
     } catch {
-      if (changedEntry && recovery) {
+      const ownsFailedRebuild =
+        rebuildRequest === null ||
+        ownsHistoryRequest(
+          rebuildRequest.controller,
+          rebuildRequest.generation,
+        );
+      if (changedEntry && recovery && ownsFailedRebuild) {
         const committedEntry = changedEntry;
         setEntries((current) => mergeEntries(current, [committedEntry]));
         setOlderCursor(null);
@@ -829,12 +885,18 @@ export function EntryExperience({
           "Entry Time changed, but Diary needs a fresh History snapshot. Refresh History to continue browsing.",
         );
         setCalendarRequestVersion((current) => current + 1);
-      } else {
+      } else if (!changedEntry) {
         setEntryTimeError(
           "Diary could not change Entry Time. No Entry metadata or revision was changed.",
         );
       }
     } finally {
+      if (rebuildRequest) {
+        finishHistoryRequest(
+          rebuildRequest.controller,
+          rebuildRequest.generation,
+        );
+      }
       setEntryTimeState("idle");
     }
   }
@@ -843,27 +905,26 @@ export function EntryExperience({
     if (
       !historyRecovery ||
       historyRecoveryState === "loading" ||
-      adjacentController.current !== null
+      historyRequestController.current !== null
     ) {
       return;
     }
 
+    const recovery = historyRecovery;
     setHistoryRecoveryState("loading");
-    historyGeneration.current += 1;
-    const controller = new AbortController();
-    adjacentController.current = controller;
+    const request = beginHistoryRequest();
     try {
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
-        historyRecovery.anchorDate,
-        historyRecovery.anchorEntryId,
-        historyRecovery.targetEntryCount,
-        controller.signal,
+        recovery.anchorDate,
+        recovery.anchorEntryId,
+        recovery.targetEntryCount,
+        request.controller.signal,
       );
-      if (controller.signal.aborted) {
+      if (!ownsHistoryRequest(request.controller, request.generation)) {
         return;
       }
-      pendingHistoryAnchor.current = historyRecovery.readingAnchor;
+      pendingHistoryAnchor.current = recovery.readingAnchor;
       setEntries(rebuilt.entries);
       setOlderCursor(rebuilt.olderCursor);
       setNewerCursor(rebuilt.newerCursor);
@@ -871,16 +932,15 @@ export function EntryExperience({
       setHistoryRecovery(null);
       setAdjacentError(null);
     } catch {
-      if (!controller.signal.aborted) {
+      if (ownsHistoryRequest(request.controller, request.generation)) {
         setAdjacentError(
           "Entry Time changed, but Diary still needs a fresh History snapshot. Refresh History to try again.",
         );
       }
     } finally {
-      if (adjacentController.current === controller) {
-        adjacentController.current = null;
+      if (finishHistoryRequest(request.controller, request.generation)) {
+        setHistoryRecoveryState("idle");
       }
-      setHistoryRecoveryState("idle");
     }
   }
 
@@ -1016,13 +1076,13 @@ export function EntryExperience({
   }
 
   function jumpToHistoryDate(date: string) {
-    historyGeneration.current += 1;
-    adjacentController.current?.abort();
-    adjacentController.current = null;
+    retireHistoryOwnership();
     pendingHistoryAnchor.current = null;
     userScrolledHistory.current = false;
     setAdjacentLoad(null);
     setAdjacentError(null);
+    setHistoryRecovery(null);
+    setHistoryRecoveryState("idle");
     setEntries([]);
     setOlderCursor(null);
     setNewerCursor(null);
