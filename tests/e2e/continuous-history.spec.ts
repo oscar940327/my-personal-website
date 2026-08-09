@@ -722,8 +722,16 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await expect(movingEntry.locator("dd").first()).toContainText("Jul");
 });
 
-for (const rebuildPath of ["save", "recovery"] as const) {
-test(`Entry Time ${rebuildPath} rebuild searches newer for the committed active Entry`, async ({
+for (const scenario of [
+  { rebuildPath: "save", delayedLayoutShift: false },
+  { rebuildPath: "recovery", delayedLayoutShift: false },
+  { rebuildPath: "recovery", delayedLayoutShift: true },
+] as const) {
+  const { rebuildPath, delayedLayoutShift } = scenario;
+  const delayedLayoutLabel = delayedLayoutShift
+    ? " after a delayed layout change"
+    : "";
+  test(`Entry Time ${rebuildPath} rebuild searches newer for the committed active Entry${delayedLayoutLabel}`, async ({
   page,
 }) => {
   await page.clock.setFixedTime(new Date("2026-07-30T12:00:00+08:00"));
@@ -945,6 +953,35 @@ test(`Entry Time ${rebuildPath} rebuild searches newer for the committed active 
   });
 
   await page.goto("diary.html?date=2026-07-29");
+  if (delayedLayoutShift) {
+    await page.evaluate(() => {
+      let releaseFontReady!: () => void;
+      const controlledFontReady = new Promise<FontFaceSet>((resolve) => {
+        releaseFontReady = () => resolve(document.fonts);
+      });
+      Object.defineProperty(document.fonts, "ready", {
+        configurable: true,
+        get: () => controlledFontReady,
+      });
+      (
+        window as typeof window & {
+          __ticket08ReleaseFontReady: () => void;
+        }
+      ).__ticket08ReleaseFontReady = releaseFontReady;
+    });
+    await page.addStyleTag({
+      content: `
+        html[data-ticket08-delayed-layout] .diary-history-groups {
+          font-family: serif;
+          letter-spacing: 0.04em;
+        }
+
+        .diary-history-groups {
+          overflow-anchor: none;
+        }
+      `,
+    });
+  }
   const readingCard = page.locator(`#entry-${readingEntry.id}`);
   const movingCard = page.locator(`#entry-${movingBefore.id}`);
   await readingCard.evaluate((element) => {
@@ -973,6 +1010,21 @@ test(`Entry Time ${rebuildPath} rebuild searches newer for the committed active 
   await expect(
     page.getByRole("button", { name: "Refresh History" }),
   ).toHaveCount(0);
+  if (delayedLayoutShift) {
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      });
+      document.documentElement.dataset.ticket08DelayedLayout = "true";
+      (
+        window as typeof window & {
+          __ticket08ReleaseFontReady: () => void;
+        }
+      ).__ticket08ReleaseFontReady();
+    });
+  }
   await expect
     .poll(() =>
       readingCard.evaluate((element) => element.getBoundingClientRect().top),

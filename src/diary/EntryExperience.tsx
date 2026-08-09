@@ -485,12 +485,29 @@ export function EntryExperience({
     if (!anchor) {
       return;
     }
-    restoreReadingAnchor(anchor);
     pendingHistoryAnchor.current = null;
-    const frame = window.requestAnimationFrame(() => {
+    let cancelled = false;
+    const frames = new Set<number>();
+    const restoreAfterLayout = () => {
+      if (cancelled) {
+        return;
+      }
       restoreReadingAnchor(anchor);
-    });
-    return () => window.cancelAnimationFrame(frame);
+      const frame = window.requestAnimationFrame(() => {
+        frames.delete(frame);
+        if (!cancelled) {
+          restoreReadingAnchor(anchor);
+        }
+      });
+      frames.add(frame);
+    };
+
+    restoreAfterLayout();
+    void document.fonts.ready.then(restoreAfterLayout);
+    return () => {
+      cancelled = true;
+      frames.forEach((frame) => window.cancelAnimationFrame(frame));
+    };
   }, [entries]);
 
   useEffect(() => {
