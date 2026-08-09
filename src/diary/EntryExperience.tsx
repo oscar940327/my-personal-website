@@ -49,6 +49,7 @@ type HistoryWindow = {
 type HistoryRecovery = {
   anchorDate: string;
   activeEntry: EntryRecord;
+  readingEntry: EntryRecord | null;
   readingAnchor: ReadingAnchor | null;
   targetEntryCount: number;
 };
@@ -159,6 +160,7 @@ async function rebuildHistoryWindow(
   accessToken: string,
   anchorDate: string,
   activeEntry: EntryRecord,
+  readingEntry: EntryRecord | null,
   targetEntryCount: number,
   signal: AbortSignal,
 ): Promise<HistoryWindow> {
@@ -180,26 +182,36 @@ async function rebuildHistoryWindow(
   );
   let requestCount = 1;
   let lastAmbiguousDirection: HistoryDirection | null = null;
+  const mandatoryEntries =
+    readingEntry && readingEntry.id !== activeEntry.id
+      ? [activeEntry, readingEntry]
+      : [activeEntry];
 
   while (
     (rebuiltEntries.length < boundedTargetEntryCount ||
-      !rebuiltEntries.some((entry) => entry.id === activeEntry.id)) &&
+      mandatoryEntries.some(
+        (mandatoryEntry) =>
+          !rebuiltEntries.some((entry) => entry.id === mandatoryEntry.id),
+      )) &&
     requestCount < HISTORY_ANCHOR_SEARCH_PAGE_LIMIT
   ) {
     const firstEntry = rebuiltEntries[0];
     const lastEntry = rebuiltEntries.at(-1);
-    const activeIsMissing = !rebuiltEntries.some(
-      (entry) => entry.id === activeEntry.id,
+    const missingMandatoryEntries = mandatoryEntries.filter(
+      (mandatoryEntry) =>
+        !rebuiltEntries.some((entry) => entry.id === mandatoryEntry.id),
     );
     const necessaryDirection =
-      activeIsMissing &&
       firstEntry &&
-      compareEntries(activeEntry, firstEntry) < 0 &&
+      missingMandatoryEntries.some(
+        (mandatoryEntry) => compareEntries(mandatoryEntry, firstEntry) < 0,
+      ) &&
       newerCursor
         ? "newer"
-        : activeIsMissing &&
-            lastEntry &&
-            compareEntries(activeEntry, lastEntry) > 0 &&
+        : lastEntry &&
+            missingMandatoryEntries.some(
+              (mandatoryEntry) => compareEntries(mandatoryEntry, lastEntry) > 0,
+            ) &&
             olderCursor
           ? "older"
           : null;
@@ -245,8 +257,13 @@ async function rebuildHistoryWindow(
     requestCount += 1;
   }
 
-  if (!rebuiltEntries.some((entry) => entry.id === activeEntry.id)) {
-    throw new Error("History rebuild did not locate its active Entry");
+  if (
+    mandatoryEntries.some(
+      (mandatoryEntry) =>
+        !rebuiltEntries.some((entry) => entry.id === mandatoryEntry.id),
+    )
+  ) {
+    throw new Error("History rebuild did not locate its mandatory Entries");
   }
 
   return {
@@ -899,6 +916,7 @@ export function EntryExperience({
       recovery = {
         anchorDate: readingEntry?.owner_date ?? changed.owner_date,
         activeEntry: changed,
+        readingEntry: readingEntry ?? null,
         readingAnchor,
         targetEntryCount: Math.max(
           HISTORY_PAGE_LIMIT,
@@ -920,6 +938,7 @@ export function EntryExperience({
         accessToken,
         recovery.anchorDate,
         recovery.activeEntry,
+        recovery.readingEntry,
         recovery.targetEntryCount,
         rebuildRequest.controller.signal,
       );
@@ -990,6 +1009,7 @@ export function EntryExperience({
         accessToken,
         recovery.anchorDate,
         recovery.activeEntry,
+        recovery.readingEntry,
         recovery.targetEntryCount,
         request.controller.signal,
       );

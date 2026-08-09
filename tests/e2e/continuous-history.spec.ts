@@ -1062,6 +1062,399 @@ for (const scenario of [
 });
 }
 
+test("Entry Time save and recovery retain a deep reading Entry distinct from the changed Entry", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-07-30T12:00:00+08:00"));
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: `deep-anchor-${userId}-refresh-token`,
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+
+  const readingEntry = entry(
+    "deep-reading-a",
+    "2026-07-29",
+    "2026-07-29T21:00:00.123456Z",
+    "Deep reading Entry A must remain the viewport anchor.",
+  );
+  const movingBefore = entry(
+    "deep-moving-b",
+    "2026-07-29",
+    "2026-07-29T20:59:00.123456Z",
+    "Changed Entry B starts immediately below deep reading Entry A.",
+  );
+  const movingAfterSave = {
+    ...movingBefore,
+    entry_at: "2026-07-30T01:00:00.654321Z",
+    owner_date: "2026-07-30",
+  };
+  const movingAfterRecovery = {
+    ...movingBefore,
+    entry_at: "2026-07-31T01:00:00.654321Z",
+    owner_date: "2026-07-31",
+  };
+  const denseEntries = Array.from({ length: 77 }, (_, rank) =>
+    entry(
+      `deep-dense-${rank}`,
+      "2026-07-29",
+      `2026-07-29T${String(23 - Math.floor(rank / 60)).padStart(2, "0")}:${String(59 - (rank % 60)).padStart(2, "0")}:00Z`,
+      `Dense Entry ${rank + 1}.`,
+    ),
+  );
+  const deepTail = entry(
+    "deep-tail",
+    "2026-07-29",
+    "2026-07-29T20:58:00Z",
+    "Deep tail Entry.",
+  );
+  const secondDeepTail = entry(
+    "deep-tail-2",
+    "2026-07-29",
+    "2026-07-29T20:57:00Z",
+    "Second deep tail Entry.",
+  );
+  let mutationNumber = 0;
+  const freshRootAttempts = [0, 0];
+  const historyRequests: URL[] = [];
+
+  await page.route("**/entries/*/entry-time", async (route) => {
+    mutationNumber += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: mutationNumber === 1 ? movingAfterSave : movingAfterRecovery,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    const url = new URL(route.request().url());
+    historyRequests.push(url);
+    const cursor = url.searchParams.get("cursor");
+
+    if (mutationNumber === 0) {
+      const oldPage = /^old-deep-older-(\d)$/.exec(cursor ?? "");
+      if (oldPage) {
+        const pageNumber = Number(oldPage[1]);
+        const pageEntries =
+          pageNumber < 3
+            ? denseEntries.slice(pageNumber * 20, (pageNumber + 1) * 20)
+            : [
+                ...denseEntries.slice(60),
+                readingEntry,
+                movingBefore,
+                deepTail,
+              ];
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-29",
+            groups: [{ date: "2026-07-29", entries: pageEntries }],
+            newer_cursor: null,
+            older_cursor:
+              pageNumber < 3
+                ? `old-deep-older-${pageNumber + 1}`
+                : "old-deep-older-continuation",
+          },
+          status: 200,
+        });
+        return;
+      }
+
+      expect(cursor).toBeNull();
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [
+            { date: "2026-07-29", entries: denseEntries.slice(0, 20) },
+          ],
+          newer_cursor: null,
+          older_cursor: "old-deep-older-1",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    const generation = mutationNumber;
+    if (!cursor) {
+      freshRootAttempts[generation - 1] += 1;
+      if (generation === 2 && freshRootAttempts[1] === 1) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "force committed recovery" },
+          status: 503,
+        });
+        return;
+      }
+    }
+
+    if (cursor === `fresh-deep-${generation}-newer-1`) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [
+            {
+              date: generation === 1 ? "2026-07-30" : "2026-07-31",
+              entries: [
+                generation === 1 ? movingAfterSave : movingAfterRecovery,
+              ],
+            },
+          ],
+          newer_cursor: `fresh-deep-${generation}-newer-continuation`,
+          older_cursor: `fresh-deep-${generation}-older-1`,
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (cursor === `fresh-deep-${generation}-newer-continuation`) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [
+            {
+              date: "2026-08-01",
+              entries: [
+                entry(
+                  `fresh-deep-${generation}-newer-result`,
+                  "2026-08-01",
+                  "2026-08-01T01:00:00Z",
+                  `Fresh deep newer continuation ${generation}.`,
+                ),
+              ],
+            },
+          ],
+          newer_cursor: null,
+          older_cursor: `fresh-deep-${generation}-older-continuation`,
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (cursor === `fresh-deep-${generation}-older-continuation`) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [
+            {
+              date: "2026-07-28",
+              entries: [
+                entry(
+                  `fresh-deep-${generation}-older-result`,
+                  "2026-07-28",
+                  "2026-07-28T01:00:00Z",
+                  `Fresh deep older continuation ${generation}.`,
+                ),
+              ],
+            },
+          ],
+          newer_cursor: null,
+          older_cursor: null,
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    const freshOlderPage = new RegExp(
+      `^fresh-deep-${generation}-older-(\\d)$`,
+    ).exec(cursor ?? "");
+    if (freshOlderPage) {
+      const pageNumber = Number(freshOlderPage[1]);
+      const pageEntries =
+        pageNumber < 3
+          ? denseEntries.slice(pageNumber * 20, (pageNumber + 1) * 20)
+          : [
+              ...denseEntries.slice(60),
+              readingEntry,
+              deepTail,
+              secondDeepTail,
+            ];
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [{ date: "2026-07-29", entries: pageEntries }],
+          newer_cursor: `fresh-deep-${generation}-newer-continuation`,
+          older_cursor:
+            pageNumber < 3
+              ? `fresh-deep-${generation}-older-${pageNumber + 1}`
+              : `fresh-deep-${generation}-older-continuation`,
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    expect(cursor).toBeNull();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-29",
+        groups: [
+          { date: "2026-07-29", entries: denseEntries.slice(0, 20) },
+        ],
+        newer_cursor: `fresh-deep-${generation}-newer-1`,
+        older_cursor: `fresh-deep-${generation}-older-1`,
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html?date=2026-07-29");
+  await page.addStyleTag({
+    content: ".diary-history-groups { overflow-anchor: none; }",
+  });
+  const loadOlder = page.getByRole("button", { name: "Load older Entries" });
+  for (const expectedCount of [40, 60, 80]) {
+    await loadOlder.click();
+    await expect(page.locator("article.diary-entry")).toHaveCount(
+      expectedCount,
+    );
+  }
+  const readingCard = page.locator(`#entry-${readingEntry.id}`);
+  const movingCard = page.locator(`#entry-${movingBefore.id}`);
+  const settlePreviousAnchorAndPositionReadingEntry = async () => {
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      });
+    });
+    await readingCard.evaluate((element) => {
+      element.scrollIntoView({ block: "start" });
+    });
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          window.requestAnimationFrame(() => resolve()),
+        ),
+    );
+    return readingCard.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+  };
+  const saveTopBefore = await settlePreviousAnchorAndPositionReadingEntry();
+  await movingCard.getByText("Entry actions", { exact: true }).click();
+  await movingCard
+    .getByRole("button", { name: "Change Entry Time" })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+  const saveRequestStart = historyRequests.length;
+  await editor.getByLabel("New Entry Time").fill("2026-07-30T09:00");
+  await editor.getByRole("button", { name: "Save Entry Time" }).click();
+
+  await expect(editor).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
+  await expect(readingCard).toHaveCount(1);
+  await expect(movingCard).toHaveCount(1);
+  await expect
+    .poll(() =>
+      readingCard.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(saveTopBefore, 0);
+  const saveRequests = historyRequests.slice(saveRequestStart);
+  expect(saveRequests).toHaveLength(5);
+  expect(saveRequests.filter((url) => !url.searchParams.get("cursor"))).toHaveLength(1);
+  expect(
+    saveRequests
+      .map((url) => url.searchParams.get("cursor"))
+      .filter((cursor): cursor is string => cursor !== null)
+      .every((cursor) => cursor.startsWith("fresh-deep-1-")),
+  ).toBe(true);
+
+  const recoveryTopBefore =
+    await settlePreviousAnchorAndPositionReadingEntry();
+  await movingCard
+    .getByText("Entry actions", { exact: true })
+    .evaluate((element: HTMLElement) => element.click());
+  await movingCard
+    .getByRole("button", { name: "Change Entry Time" })
+    .evaluate((element: HTMLButtonElement) => element.click());
+  await editor.getByLabel("New Entry Time").fill("2026-07-31T09:00");
+  await editor.getByRole("button", { name: "Save Entry Time" }).click();
+  const refreshHistory = page.getByRole("button", { name: "Refresh History" });
+  await expect(refreshHistory).toBeVisible();
+  const recoveryRequestStart = historyRequests.length;
+  await refreshHistory.click();
+
+  await expect(refreshHistory).toHaveCount(0);
+  await expect(readingCard).toHaveCount(1);
+  await expect(movingCard).toHaveCount(1);
+  await expect
+    .poll(() =>
+      readingCard.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(recoveryTopBefore, 0);
+  const recoveryRequests = historyRequests.slice(recoveryRequestStart);
+  expect(recoveryRequests).toHaveLength(5);
+  expect(
+    recoveryRequests.filter((url) => !url.searchParams.get("cursor")),
+  ).toHaveLength(1);
+  expect(
+    recoveryRequests
+      .map((url) => url.searchParams.get("cursor"))
+      .filter((cursor): cursor is string => cursor !== null)
+      .every((cursor) => cursor.startsWith("fresh-deep-2-")),
+  ).toBe(true);
+
+  await page.getByRole("button", { name: "Load newer Entries" }).click();
+  await expect(page.getByText("Fresh deep newer continuation 2.")).toBeVisible();
+  await page.getByRole("button", { name: "Load older Entries" }).click();
+  await expect(page.getByText("Fresh deep older continuation 2.")).toBeVisible();
+  await expect(movingCard).toHaveCount(1);
+  expect(
+    historyRequests.some((url) =>
+      url.searchParams.get("cursor")?.startsWith("old-deep"),
+    ),
+  ).toBe(true);
+  expect(
+    historyRequests
+      .slice(saveRequestStart)
+      .some((url) => url.searchParams.get("cursor")?.startsWith("old-deep")),
+  ).toBe(false);
+});
+
 for (const rootOutcome of ["success", "failure"] as const) {
   const adjacentDirection = rootOutcome === "success" ? "older" : "newer";
   test(`delayed ${adjacentDirection} load retires at midnight root ${rootOutcome}`, async ({
