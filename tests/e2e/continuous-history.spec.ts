@@ -2,12 +2,15 @@ import { expect, test } from "@playwright/test";
 
 const ownerId = "61c2f4ca-2fab-4b50-a0cf-12aac0ec0b24";
 
-function unsignedAccessToken(subject: string): string {
+function unsignedAccessToken(
+  subject: string,
+  lifetimeSeconds = 3600,
+): string {
   const encode = (value: object) =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "ES256", typ: "JWT" })}.${encode({
     aud: "authenticated",
-    exp: Math.floor(Date.now() / 1000) + 3600,
+    exp: Math.floor(Date.now() / 1000) + lifetimeSeconds,
     sub: subject,
   })}.c2ln`;
 }
@@ -719,6 +722,294 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await expect(movingEntry.locator("dd").first()).toContainText("Jul");
 });
 
+for (const rebuildPath of ["save", "recovery"] as const) {
+test(`Entry Time ${rebuildPath} rebuild searches newer for the committed active Entry`, async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-07-30T12:00:00+08:00"));
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: `newer-${userId}-refresh-token`,
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+
+  const readingEntry = entry(
+    "newer-search-reading-a",
+    "2026-07-29",
+    "2026-07-29T05:00:00.123456Z",
+    "Reading card A remains the viewport anchor.",
+  );
+  const movingBefore = entry(
+    "newer-search-moving-b",
+    "2026-07-29",
+    "2026-07-29T04:00:00.123456Z",
+    "Changed card B must be found as the active Entry.",
+  );
+  const movingAfter = {
+    ...movingBefore,
+    entry_at: "2026-07-30T01:00:00.654321Z",
+    owner_date: "2026-07-30",
+  };
+  const initialFillers = Array.from({ length: 19 }, (_, rank) =>
+    entry(
+      `newer-search-initial-${rank}`,
+      "2026-07-29",
+      `2026-07-29T03:${String(59 - rank).padStart(2, "0")}:00Z`,
+      `Fresh initial filler ${rank + 1}.`,
+    ),
+  );
+  const olderEntries = Array.from({ length: 80 }, (_, rank) =>
+    entry(
+      `newer-search-older-${rank}`,
+      "2026-07-28",
+      `2026-07-28T${String(23 - Math.floor(rank / 4)).padStart(2, "0")}:${String(59 - (rank % 4)).padStart(2, "0")}:00Z`,
+      `Older lifetime Entry ${rank + 1}.`,
+    ),
+  );
+  let mutationCommitted = false;
+  let freshRootRequests = 0;
+  const historyRequests: URL[] = [];
+
+  await page.route("**/entries/*/entry-time", async (route) => {
+    mutationCommitted = true;
+    await route.fulfill({
+      contentType: "application/json",
+      json: movingAfter,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    const url = new URL(route.request().url());
+    historyRequests.push(url);
+    const cursor = url.searchParams.get("cursor");
+    if (!mutationCommitted) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [
+            {
+              date: "2026-07-29",
+              entries: [readingEntry, movingBefore],
+            },
+          ],
+          newer_cursor: "old-newer",
+          older_cursor: "old-older",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (!cursor) {
+      freshRootRequests += 1;
+      if (rebuildPath === "recovery" && freshRootRequests === 1) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "first fresh snapshot unavailable" },
+          status: 503,
+        });
+        return;
+      }
+    }
+
+    if (cursor === "fresh-newer-1") {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [{ date: "2026-07-30", entries: [movingAfter] }],
+          newer_cursor: "fresh-newer-continuation",
+          older_cursor: "fresh-older-1",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (cursor === "fresh-newer-continuation") {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [
+            {
+              date: "2026-07-31",
+              entries: [
+                entry(
+                  "newer-search-fresh-continuation",
+                  "2026-07-31",
+                  "2026-07-31T01:00:00Z",
+                  "Fresh newer continuation.",
+                ),
+              ],
+            },
+          ],
+          newer_cursor: null,
+          older_cursor: "fresh-older-1",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    const olderPage = /^fresh-older-(\d)$/.exec(cursor ?? "");
+    if (olderPage) {
+      const pageNumber = Number(olderPage[1]);
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [
+            {
+              date: "2026-07-28",
+              entries: olderEntries.slice(
+                (pageNumber - 1) * 20,
+                pageNumber * 20,
+              ),
+            },
+          ],
+          newer_cursor: "fresh-newer-continuation",
+          older_cursor:
+            pageNumber < 4
+              ? `fresh-older-${pageNumber + 1}`
+              : "fresh-older-continuation",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    expect(cursor).toBeNull();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-29",
+        groups: [
+          {
+            date: "2026-07-29",
+            entries: [readingEntry, ...initialFillers],
+          },
+        ],
+        newer_cursor: "fresh-newer-1",
+        older_cursor: "fresh-older-1",
+      },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/calendar**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        days: [
+          { date: "2026-07-29", entry_count: 1 },
+          { date: "2026-07-30", entry_count: 1 },
+        ],
+        month: "2026-07",
+        time_zone: "Asia/Taipei",
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html?date=2026-07-29");
+  const readingCard = page.locator(`#entry-${readingEntry.id}`);
+  const movingCard = page.locator(`#entry-${movingBefore.id}`);
+  await readingCard.evaluate((element) => {
+    element.scrollIntoView({ block: "start" });
+  });
+  const topBefore = await readingCard.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  await movingCard.getByText("Entry actions", { exact: true }).click();
+  await movingCard
+    .getByRole("button", { name: "Change Entry Time" })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+  let rebuildRequestStart = historyRequests.length;
+  await editor.getByLabel("New Entry Time").fill("2026-07-30T09:00");
+  await editor.getByRole("button", { name: "Save Entry Time" }).click();
+
+  if (rebuildPath === "recovery") {
+    const refresh = page.getByRole("button", { name: "Refresh History" });
+    await expect(refresh).toBeVisible();
+    rebuildRequestStart = historyRequests.length;
+    await refresh.click();
+  }
+  await expect(editor).not.toBeVisible();
+  await expect(page.locator(`#entry-${movingAfter.id}`)).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Refresh History" }),
+  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      readingCard.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(topBefore, 0);
+  const rebuildRequests = historyRequests.slice(rebuildRequestStart);
+  expect(rebuildRequests.length).toBeLessThanOrEqual(5);
+  expect(
+    rebuildRequests.filter(
+      (url) => url.searchParams.get("cursor") === null,
+    ),
+  ).toHaveLength(1);
+  expect(
+    rebuildRequests.filter(
+      (url) => url.searchParams.get("direction") === "newer",
+    ),
+  ).toHaveLength(1);
+  expect(
+    rebuildRequests.filter(
+      (url) => url.searchParams.get("direction") === "older",
+    ),
+  ).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Load older Entries" }).click();
+  await expect(page.getByText("Older lifetime Entry 1.")).toBeVisible();
+  await page.getByRole("button", { name: "Load newer Entries" }).click();
+  await expect(page.getByText("Fresh newer continuation.")).toBeVisible();
+  await expect(page.locator(`#entry-${movingAfter.id}`)).toHaveCount(1);
+  expect(await page.locator("article.diary-entry").count()).toBeLessThan(101);
+  expect(
+    historyRequests.some((url) =>
+      url.searchParams.get("cursor")?.startsWith("old-"),
+    ),
+  ).toBe(false);
+});
+}
+
 for (const rootOutcome of ["success", "failure"] as const) {
   const adjacentDirection = rootOutcome === "success" ? "older" : "newer";
   test(`delayed ${adjacentDirection} load retires at midnight root ${rootOutcome}`, async ({
@@ -727,15 +1018,20 @@ for (const rootOutcome of ["success", "failure"] as const) {
     const beforeMidnight = new Date("2026-07-30T23:00:00+08:00");
     await page.clock.install({ time: beforeMidnight });
     await page.clock.pauseAt(beforeMidnight);
-    const accessToken = unsignedAccessToken(ownerId);
+    const syntheticSessionLifetimeSeconds = 48 * 60 * 60;
+    const accessToken = unsignedAccessToken(
+      ownerId,
+      syntheticSessionLifetimeSeconds,
+    );
     await page.addInitScript(
-      ({ ownerAccessToken, userId }) => {
+      ({ ownerAccessToken, syntheticSessionLifetimeSeconds, userId }) => {
         window.localStorage.setItem(
           "sb-127-auth-token",
           JSON.stringify({
             access_token: ownerAccessToken,
-            expires_at: Math.floor(Date.now() / 1000) + 3600,
-            expires_in: 3600,
+            expires_at:
+              Math.floor(Date.now() / 1000) + syntheticSessionLifetimeSeconds,
+            expires_in: syntheticSessionLifetimeSeconds,
             refresh_token: `midnight-adjacent-${userId}`,
             token_type: "bearer",
             user: {
@@ -748,7 +1044,11 @@ for (const rootOutcome of ["success", "failure"] as const) {
           }),
         );
       },
-      { ownerAccessToken: accessToken, userId: ownerId },
+      {
+        ownerAccessToken: accessToken,
+        syntheticSessionLifetimeSeconds,
+        userId: ownerId,
+      },
     );
     await page.route("**/health", async (route) => {
       await route.fulfill({
@@ -954,6 +1254,295 @@ for (const rootOutcome of ["success", "failure"] as const) {
           `fresh-${adjacentDirection}`,
       ),
     ).toHaveLength(1);
+  });
+}
+
+for (const rootOutcome of ["success", "failure"] as const) {
+  test(`midnight root ${rootOutcome} preserves a committed Entry Time rebuild`, async ({
+    page,
+  }) => {
+    const beforeMidnight = new Date("2026-07-30T23:59:59+08:00");
+    await page.clock.install({ time: beforeMidnight });
+    await page.clock.pauseAt(beforeMidnight);
+    const syntheticSessionLifetimeSeconds = 48 * 60 * 60;
+    const accessToken = unsignedAccessToken(
+      ownerId,
+      syntheticSessionLifetimeSeconds,
+    );
+    await page.addInitScript(
+      ({ ownerAccessToken, syntheticSessionLifetimeSeconds, userId }) => {
+        window.localStorage.setItem(
+          "sb-127-auth-token",
+          JSON.stringify({
+            access_token: ownerAccessToken,
+            expires_at:
+              Math.floor(Date.now() / 1000) + syntheticSessionLifetimeSeconds,
+            expires_in: syntheticSessionLifetimeSeconds,
+            refresh_token: `midnight-committed-${userId}`,
+            token_type: "bearer",
+            user: {
+              app_metadata: {},
+              aud: "authenticated",
+              created_at: new Date().toISOString(),
+              id: userId,
+              user_metadata: {},
+            },
+          }),
+        );
+      },
+      {
+        ownerAccessToken: accessToken,
+        syntheticSessionLifetimeSeconds,
+        userId: ownerId,
+      },
+    );
+    await page.route("**/health", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { service: "diary-api", status: "ready" },
+        status: 200,
+      });
+    });
+    await page.route("**/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { owner_id: ownerId, status: "authenticated" },
+        status: 200,
+      });
+    });
+
+    const readingEntry = entry(
+      `midnight-committed-reading-${rootOutcome}`,
+      "2026-07-30",
+      "2026-07-30T05:00:00.123456Z",
+      `Reading anchor before committed root ${rootOutcome}.`,
+    );
+    const movingBefore = entry(
+      `midnight-committed-moving-${rootOutcome}`,
+      "2026-07-30",
+      "2026-07-30T04:00:00.123456Z",
+      `Committed mutation survives root ${rootOutcome}.`,
+    );
+    const movingAfter = {
+      ...movingBefore,
+      entry_at: "2026-07-31T01:00:00.654321Z",
+      owner_date: "2026-07-31",
+    };
+    const freshRootCompanion = entry(
+      `midnight-committed-root-${rootOutcome}`,
+      "2026-07-31",
+      "2026-07-31T02:00:00Z",
+      `Fresh root state after ${rootOutcome}.`,
+    );
+    const freshContinuation = entry(
+      `midnight-committed-continuation-${rootOutcome}`,
+      "2026-07-29",
+      "2026-07-29T02:00:00Z",
+      `Fresh root continuation after ${rootOutcome}.`,
+    );
+    let mutationCommitted = false;
+    let rootRequests = 0;
+    let releaseRebuild!: () => void;
+    const rebuildRelease = new Promise<void>((resolve) => {
+      releaseRebuild = resolve;
+    });
+    let markRebuildStarted!: () => void;
+    const rebuildStarted = new Promise<void>((resolve) => {
+      markRebuildStarted = resolve;
+    });
+    let markRebuildSettled!: () => void;
+    const rebuildSettled = new Promise<void>((resolve) => {
+      markRebuildSettled = resolve;
+    });
+    const historyRequests: URL[] = [];
+    let calendarRequests = 0;
+
+    await page.route("**/entries/*/entry-time", async (route) => {
+      mutationCommitted = true;
+      await route.fulfill({
+        contentType: "application/json",
+        json: movingAfter,
+        status: 200,
+      });
+    });
+    await page.route("**/entries/history**", async (route) => {
+      const url = new URL(route.request().url());
+      historyRequests.push(url);
+      const cursor = url.searchParams.get("cursor");
+      if (cursor === "fresh-root-older") {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-31",
+            groups: [
+              { date: "2026-07-29", entries: [freshContinuation] },
+            ],
+            newer_cursor: "fresh-root-newer",
+            older_cursor: null,
+          },
+          status: 200,
+        });
+        return;
+      }
+      if (cursor === "fresh-root-newer") {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-31",
+            groups: [],
+            newer_cursor: null,
+            older_cursor: null,
+          },
+          status: 200,
+        });
+        return;
+      }
+      expect(cursor).toBeNull();
+      if (!mutationCommitted) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-30",
+            groups: [
+              {
+                date: "2026-07-30",
+                entries: [readingEntry, movingBefore],
+              },
+            ],
+            newer_cursor: "old-root-newer",
+            older_cursor: "old-root-older",
+          },
+          status: 200,
+        });
+        return;
+      }
+      if (url.searchParams.get("anchor_date") === "2026-07-30") {
+        markRebuildStarted();
+        await rebuildRelease;
+        try {
+          await route.fulfill({
+            contentType: "application/json",
+            json: {
+              anchor_date: "2026-07-30",
+              groups: [
+                { date: "2026-07-30", entries: [movingBefore] },
+              ],
+              newer_cursor: "stale-rebuild-newer",
+              older_cursor: "stale-rebuild-older",
+            },
+            status: 200,
+          });
+        } catch {
+          // Root takeover should abort the delayed mutation rebuild.
+        } finally {
+          markRebuildSettled();
+        }
+        return;
+      }
+
+      rootRequests += 1;
+      if (rootOutcome === "failure" && rootRequests === 1) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "midnight root unavailable" },
+          status: 503,
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-31",
+          groups: [
+            {
+              date: "2026-07-31",
+              entries: [freshRootCompanion, movingAfter],
+            },
+          ],
+          newer_cursor: "fresh-root-newer",
+          older_cursor: "fresh-root-older",
+        },
+        status: 200,
+      });
+    });
+    await page.route("**/entries/calendar**", async (route) => {
+      calendarRequests += 1;
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          days: [
+            { date: "2026-07-30", entry_count: 1 },
+            { date: "2026-07-31", entry_count: 1 },
+          ],
+          month: "2026-07",
+          time_zone: "Asia/Taipei",
+        },
+        status: 200,
+      });
+    });
+
+    await page.goto("diary.html");
+    const readingCard = page.locator(`#entry-${readingEntry.id}`);
+    const movingCard = page.locator(`#entry-${movingBefore.id}`);
+    await readingCard.evaluate((element) => {
+      element.scrollIntoView({ block: "start" });
+    });
+    await movingCard.getByText("Entry actions", { exact: true }).click();
+    await movingCard
+      .getByRole("button", { name: "Change Entry Time" })
+      .click();
+    const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+    await editor.getByLabel("New Entry Time").fill("2026-07-31T09:00");
+    await editor.getByRole("button", { name: "Save Entry Time" }).click();
+    await rebuildStarted;
+    await page.clock.runFor(2_000);
+
+    if (rootOutcome === "success") {
+      await expect(page.locator(`#entry-${freshRootCompanion.id}`)).toBeVisible();
+    } else {
+      await expect(page.getByRole("alert")).toContainText(
+        "Diary could not load history.",
+      );
+      await expect(
+        page.getByRole("button", { name: "Retry History" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Refresh History" }),
+      ).toBeVisible();
+    }
+    releaseRebuild();
+    await rebuildSettled;
+    await expect(editor).not.toBeVisible();
+
+    if (rootOutcome === "failure") {
+      await page.getByRole("button", { name: "Retry History" }).click();
+    }
+    await expect(page.locator(`#entry-${movingAfter.id}`)).toHaveCount(1);
+    await expect(page.locator(`#entry-${freshRootCompanion.id}`)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Refresh History" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Calendar" }).click();
+    await expect(
+      page.getByRole("button", { name: "July 31, 2026, 1 Entry" }),
+    ).toBeVisible();
+    expect(calendarRequests).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "History" }).click();
+    await expect(
+      page.getByRole("button", { name: "Load older Entries" }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "Load older Entries" }).click();
+    await expect(page.locator(`#entry-${freshContinuation.id}`)).toBeVisible();
+    expect(
+      historyRequests.some((url) =>
+        url.searchParams.get("cursor")?.startsWith("old-root"),
+      ),
+    ).toBe(false);
+    expect(
+      historyRequests.some((url) =>
+        url.searchParams.get("cursor")?.startsWith("stale-rebuild"),
+      ),
+    ).toBe(false);
   });
 }
 

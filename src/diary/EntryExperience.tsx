@@ -48,7 +48,7 @@ type HistoryWindow = {
 
 type HistoryRecovery = {
   anchorDate: string;
-  activeEntryId: string;
+  activeEntry: EntryRecord;
   readingAnchor: ReadingAnchor | null;
   targetEntryCount: number;
 };
@@ -129,15 +129,17 @@ function timestampMicroseconds(isoValue: string): bigint {
   );
 }
 
+function compareEntries(left: EntryRecord, right: EntryRecord): number {
+  const leftEntryTime = timestampMicroseconds(left.entry_at);
+  const rightEntryTime = timestampMicroseconds(right.entry_at);
+  if (leftEntryTime !== rightEntryTime) {
+    return leftEntryTime > rightEntryTime ? -1 : 1;
+  }
+  return right.id.localeCompare(left.id);
+}
+
 function sortEntries(entries: EntryRecord[]): EntryRecord[] {
-  return [...entries].sort((left, right) => {
-    const leftEntryTime = timestampMicroseconds(left.entry_at);
-    const rightEntryTime = timestampMicroseconds(right.entry_at);
-    if (leftEntryTime !== rightEntryTime) {
-      return leftEntryTime > rightEntryTime ? -1 : 1;
-    }
-    return right.id.localeCompare(left.id);
-  });
+  return [...entries].sort(compareEntries);
 }
 
 function mergeEntries(
@@ -156,7 +158,7 @@ function mergeEntries(
 async function rebuildHistoryWindow(
   accessToken: string,
   anchorDate: string,
-  activeEntryId: string,
+  activeEntry: EntryRecord,
   targetEntryCount: number,
   signal: AbortSignal,
 ): Promise<HistoryWindow> {
@@ -177,22 +179,51 @@ async function rebuildHistoryWindow(
     Math.min(targetEntryCount, HISTORY_REBUILD_ENTRY_LIMIT),
   );
   let requestCount = 1;
+  let lastAmbiguousDirection: HistoryDirection | null = null;
 
   while (
     (rebuiltEntries.length < boundedTargetEntryCount ||
-      !rebuiltEntries.some((entry) => entry.id === activeEntryId)) &&
+      !rebuiltEntries.some((entry) => entry.id === activeEntry.id)) &&
     requestCount < HISTORY_ANCHOR_SEARCH_PAGE_LIMIT
   ) {
-    const direction: HistoryDirection | null = olderCursor
-      ? "older"
-      : newerCursor
+    const firstEntry = rebuiltEntries[0];
+    const lastEntry = rebuiltEntries.at(-1);
+    const activeIsMissing = !rebuiltEntries.some(
+      (entry) => entry.id === activeEntry.id,
+    );
+    const necessaryDirection =
+      activeIsMissing &&
+      firstEntry &&
+      compareEntries(activeEntry, firstEntry) < 0 &&
+      newerCursor
         ? "newer"
-        : null;
+        : activeIsMissing &&
+            lastEntry &&
+            compareEntries(activeEntry, lastEntry) > 0 &&
+            olderCursor
+          ? "older"
+          : null;
+    const ambiguousDirection: HistoryDirection | null =
+      olderCursor && newerCursor
+        ? lastAmbiguousDirection === "older"
+          ? "newer"
+          : "older"
+        : olderCursor
+          ? "older"
+          : newerCursor
+            ? "newer"
+            : null;
+    const direction: HistoryDirection | null =
+      necessaryDirection ?? ambiguousDirection;
     const cursor = direction === "older" ? olderCursor : newerCursor;
-    if (!direction || !cursor || requestedCursors.has(cursor)) {
+    const requestKey = direction && cursor ? `${direction}:${cursor}` : null;
+    if (!direction || !cursor || !requestKey || requestedCursors.has(requestKey)) {
       break;
     }
-    requestedCursors.add(cursor);
+    requestedCursors.add(requestKey);
+    if (!necessaryDirection) {
+      lastAmbiguousDirection = direction;
+    }
     const page = await loadHistoryEntries(
       accessToken,
       {
@@ -214,7 +245,7 @@ async function rebuildHistoryWindow(
     requestCount += 1;
   }
 
-  if (!rebuiltEntries.some((entry) => entry.id === activeEntryId)) {
+  if (!rebuiltEntries.some((entry) => entry.id === activeEntry.id)) {
     throw new Error("History rebuild did not locate its active Entry");
   }
 
@@ -399,6 +430,7 @@ export function EntryExperience({
   const preservedScrollPosition = useRef(0);
   const preservedReadingAnchor = useRef<ReadingAnchor | null>(null);
   const entryTimeReadingAnchor = useRef<ReadingAnchor | null>(null);
+  const committedHistoryRecovery = useRef<HistoryRecovery | null>(null);
   const pendingHistoryAnchor = useRef<ReadingAnchor | null>(null);
   const historyRequestController = useRef<AbortController | null>(null);
   const revisionHistoryController = useRef<AbortController | null>(null);
@@ -476,6 +508,11 @@ export function EntryExperience({
     }
 
     async function refreshHistory() {
+      if (committedHistoryRecovery.current) {
+        committedHistoryRecovery.current = null;
+        setTimeEditingEntry(null);
+        entryTimeReadingAnchor.current = null;
+      }
       const request = beginHistoryRequest();
       controller = request.controller;
       setOlderCursor(null);
@@ -496,12 +533,20 @@ export function EntryExperience({
         ) {
           return;
         }
+        const freshEntries = sortEntries(flattenGroups(page.groups));
         setAnchorDate(page.anchor_date);
-        setEntries(sortEntries(flattenGroups(page.groups)));
+        setEntries(freshEntries);
         setOlderCursor(page.older_cursor);
         setNewerCursor(page.newer_cursor);
         setHistoryState("ready");
-        setHistoryRecovery(null);
+        setHistoryRecovery((currentRecovery) =>
+          currentRecovery &&
+          !freshEntries.some(
+            (entry) => entry.id === currentRecovery.activeEntry.id,
+          )
+            ? currentRecovery
+            : null,
+        );
       } catch {
         if (
           current &&
@@ -836,20 +881,28 @@ export function EntryExperience({
           : entries.find((entry) => entry.id === readingEntryId);
       recovery = {
         anchorDate: readingEntry?.owner_date ?? changed.owner_date,
-        activeEntryId: changed.id,
+        activeEntry: changed,
         readingAnchor,
         targetEntryCount: Math.max(
           HISTORY_PAGE_LIMIT,
           Math.min(entries.length, HISTORY_REBUILD_ENTRY_LIMIT),
         ),
       };
+      committedHistoryRecovery.current = recovery;
+      setOlderCursor(null);
+      setNewerCursor(null);
+      setHistoryRecovery(recovery);
+      setSavedEntry((current) =>
+        current?.id === changed.id ? changed : current
+      );
+      setCalendarRequestVersion((current) => current + 1);
       setAdjacentLoad(null);
       setAdjacentError(null);
       rebuildRequest = beginHistoryRequest();
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
         recovery.anchorDate,
-        recovery.activeEntryId,
+        recovery.activeEntry,
         recovery.targetEntryCount,
         rebuildRequest.controller.signal,
       );
@@ -867,35 +920,26 @@ export function EntryExperience({
       setNewerCursor(rebuilt.newerCursor);
       setHistoryState("ready");
       setHistoryRecovery(null);
-      setSavedEntry((current) =>
-        current?.id === changed.id ? changed : current
-      );
+      committedHistoryRecovery.current = null;
       setTimeEditingEntry(null);
       entryTimeReadingAnchor.current = null;
-      setCalendarRequestVersion((current) => current + 1);
     } catch {
       const ownsFailedRebuild =
         rebuildRequest === null ||
         ownsHistoryRequest(
           rebuildRequest.controller,
           rebuildRequest.generation,
-        );
+      );
       if (changedEntry && recovery && ownsFailedRebuild) {
         const committedEntry = changedEntry;
         setEntries((current) => mergeEntries(current, [committedEntry]));
-        setOlderCursor(null);
-        setNewerCursor(null);
         setHistoryState("ready");
-        setHistoryRecovery(recovery);
-        setSavedEntry((current) =>
-          current?.id === committedEntry.id ? committedEntry : current
-        );
+        committedHistoryRecovery.current = null;
         setTimeEditingEntry(null);
         entryTimeReadingAnchor.current = null;
         setAdjacentError(
           "Entry Time changed, but Diary needs a fresh History snapshot. Refresh History to continue browsing.",
         );
-        setCalendarRequestVersion((current) => current + 1);
       } else if (!changedEntry) {
         setEntryTimeError(
           "Diary could not change Entry Time. No Entry metadata or revision was changed.",
@@ -928,7 +972,7 @@ export function EntryExperience({
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
         recovery.anchorDate,
-        recovery.activeEntryId,
+        recovery.activeEntry,
         recovery.targetEntryCount,
         request.controller.signal,
       );
