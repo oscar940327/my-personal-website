@@ -1773,11 +1773,41 @@ for (const rootOutcome of ["success", "failure"] as const) {
       entry_at: "2026-07-31T01:00:00.654321Z",
       owner_date: "2026-07-31",
     };
+    const oldDenseEntries = Array.from({ length: 77 }, (_, rank) =>
+      entry(
+        `midnight-committed-old-dense-${rootOutcome}-${rank}`,
+        "2026-07-30",
+        `2026-07-30T${String(23 - Math.floor(rank / 60)).padStart(2, "0")}:${String(59 - (rank % 60)).padStart(2, "0")}:00Z`,
+        `Old dense Entry ${rank + 1} before ${rootOutcome}.`,
+      )
+    );
+    const oldTail = entry(
+      `midnight-committed-old-tail-${rootOutcome}`,
+      "2026-07-30",
+      "2026-07-30T03:00:00Z",
+      `Old tail after deep reading Entry for ${rootOutcome}.\n${"Long tail content preserves scrolling space.\n".repeat(40)}`,
+    );
     const freshRootCompanion = entry(
       `midnight-committed-root-${rootOutcome}`,
       "2026-07-31",
       "2026-07-31T02:00:00Z",
       `Fresh root state after ${rootOutcome}.`,
+    );
+    const freshRootFillers = Array.from({ length: 18 }, (_, rank) =>
+      entry(
+        `midnight-committed-root-filler-${rootOutcome}-${rank}`,
+        "2026-07-31",
+        `2026-07-31T00:${String(59 - rank).padStart(2, "0")}:00Z`,
+        `Fresh root filler ${rank + 1} after ${rootOutcome}.`,
+      )
+    );
+    const freshOlderFillers = Array.from({ length: 57 }, (_, rank) =>
+      entry(
+        `midnight-committed-older-filler-${rootOutcome}-${rank}`,
+        "2026-07-30",
+        `2026-07-30T${String(23 - Math.floor(rank / 60)).padStart(2, "0")}:${String(59 - (rank % 60)).padStart(2, "0")}:00Z`,
+        `Fresh older filler ${rank + 1} after ${rootOutcome}.`,
+      )
     );
     const freshContinuation = entry(
       `midnight-committed-continuation-${rootOutcome}`,
@@ -1787,6 +1817,10 @@ for (const rootOutcome of ["success", "failure"] as const) {
     );
     let mutationCommitted = false;
     let rootRequests = 0;
+    let markRootStarted!: () => void;
+    const rootStarted = new Promise<void>((resolve) => {
+      markRootStarted = resolve;
+    });
     let releaseRebuild!: () => void;
     const rebuildRelease = new Promise<void>((resolve) => {
       releaseRebuild = resolve;
@@ -1814,7 +1848,71 @@ for (const rootOutcome of ["success", "failure"] as const) {
       const url = new URL(route.request().url());
       historyRequests.push(url);
       const cursor = url.searchParams.get("cursor");
-      if (cursor === "fresh-root-older") {
+      const oldOlderPage = /^old-root-older-(\d)$/.exec(cursor ?? "");
+      if (oldOlderPage) {
+        const pageNumber = Number(oldOlderPage[1]);
+        const oldEntries = [
+          ...oldDenseEntries,
+          readingEntry,
+          movingBefore,
+          oldTail,
+        ];
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-30",
+            groups: [
+              {
+                date: "2026-07-30",
+                entries: oldEntries.slice(
+                  pageNumber * 20,
+                  (pageNumber + 1) * 20,
+                ),
+              },
+            ],
+            newer_cursor: null,
+            older_cursor:
+              pageNumber < 3
+                ? `old-root-older-${pageNumber + 1}`
+                : null,
+          },
+          status: 200,
+        });
+        return;
+      }
+      const freshOlderPage = /^fresh-root-older-(\d)$/.exec(cursor ?? "");
+      if (freshOlderPage) {
+        const pageNumber = Number(freshOlderPage[1]);
+        const freshOlderEntries = [
+          ...freshOlderFillers,
+          readingEntry,
+          oldTail,
+          freshContinuation,
+        ];
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-31",
+            groups: [
+              {
+                date: "2026-07-30",
+                entries: freshOlderEntries.slice(
+                  (pageNumber - 1) * 20,
+                  pageNumber * 20,
+                ),
+              },
+            ],
+            newer_cursor: "fresh-root-newer",
+            older_cursor:
+              pageNumber < 3
+                ? `fresh-root-older-${pageNumber + 1}`
+                : "fresh-root-older-continuation",
+          },
+          status: 200,
+        });
+        return;
+      }
+      if (cursor === "fresh-root-older-continuation") {
         await route.fulfill({
           contentType: "application/json",
           json: {
@@ -1851,11 +1949,11 @@ for (const rootOutcome of ["success", "failure"] as const) {
             groups: [
               {
                 date: "2026-07-30",
-                entries: [readingEntry, movingBefore],
+                entries: oldDenseEntries.slice(0, 20),
               },
             ],
-            newer_cursor: "old-root-newer",
-            older_cursor: "old-root-older",
+            newer_cursor: null,
+            older_cursor: "old-root-older-1",
           },
           status: 200,
         });
@@ -1886,6 +1984,9 @@ for (const rootOutcome of ["success", "failure"] as const) {
       }
 
       rootRequests += 1;
+      if (rootRequests === 1) {
+        markRootStarted();
+      }
       if (rootOutcome === "failure" && rootRequests === 1) {
         await route.fulfill({
           contentType: "application/json",
@@ -1901,11 +2002,15 @@ for (const rootOutcome of ["success", "failure"] as const) {
           groups: [
             {
               date: "2026-07-31",
-              entries: [freshRootCompanion, movingAfter],
+              entries: [
+                freshRootCompanion,
+                movingAfter,
+                ...freshRootFillers,
+              ],
             },
           ],
           newer_cursor: "fresh-root-newer",
-          older_cursor: "fresh-root-older",
+          older_cursor: "fresh-root-older-1",
         },
         status: 200,
       });
@@ -1927,20 +2032,56 @@ for (const rootOutcome of ["success", "failure"] as const) {
     });
 
     await page.goto("diary.html");
+    await page.addStyleTag({
+      content: ".diary-history-groups { overflow-anchor: none; }",
+    });
+    const loadOlder = page.getByRole("button", { name: "Load older Entries" });
+    for (const expectedCount of [40, 60, 80]) {
+      await loadOlder.click();
+      await expect(page.locator("article.diary-entry")).toHaveCount(
+        expectedCount,
+      );
+    }
     const readingCard = page.locator(`#entry-${readingEntry.id}`);
     const movingCard = page.locator(`#entry-${movingBefore.id}`);
+    await page.evaluate(() => document.fonts.ready);
+    await page.clock.runFor(32);
     await readingCard.evaluate((element) => {
       element.scrollIntoView({ block: "start" });
+      const previousBottom = element.previousElementSibling
+        ?.getBoundingClientRect().bottom ?? 0;
+      if (previousBottom > 0) {
+        window.scrollBy({ top: Math.ceil(previousBottom) });
+      }
     });
-    await movingCard.getByText("Entry actions", { exact: true }).click();
+    const readingTopBefore = await readingCard.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    expect(
+      await page.evaluate(() =>
+        Array.from(
+          document.querySelectorAll<HTMLElement>(
+            ".diary-entry-list .diary-entry",
+          ),
+        ).find((entryElement) => {
+          const bounds = entryElement.getBoundingClientRect();
+          return bounds.bottom > 0 && bounds.top < window.innerHeight;
+        })?.id,
+      ),
+    ).toBe(`entry-${readingEntry.id}`);
+    await movingCard
+      .getByText("Entry actions", { exact: true })
+      .evaluate((element: HTMLElement) => element.click());
     await movingCard
       .getByRole("button", { name: "Change Entry Time" })
-      .click();
+      .evaluate((element: HTMLButtonElement) => element.click());
     const editor = page.getByRole("dialog", { name: "Change Entry Time" });
     await editor.getByLabel("New Entry Time").fill("2026-07-31T09:00");
     await editor.getByRole("button", { name: "Save Entry Time" }).click();
     await rebuildStarted;
+    const takeoverRequestStart = historyRequests.length;
     await page.clock.runFor(2_000);
+    await rootStarted;
 
     if (rootOutcome === "success") {
       await expect(page.locator(`#entry-${freshRootCompanion.id}`)).toBeVisible();
@@ -1962,11 +2103,29 @@ for (const rootOutcome of ["success", "failure"] as const) {
     if (rootOutcome === "failure") {
       await page.getByRole("button", { name: "Retry History" }).click();
     }
+    await expect(readingCard).toHaveCount(1);
     await expect(page.locator(`#entry-${movingAfter.id}`)).toHaveCount(1);
     await expect(page.locator(`#entry-${freshRootCompanion.id}`)).toBeVisible();
+    await expect
+      .poll(() =>
+        readingCard.evaluate(
+          (element) => element.getBoundingClientRect().top,
+        ),
+      )
+      .toBeCloseTo(readingTopBefore, 0);
     await expect(
       page.getByRole("button", { name: "Refresh History" }),
     ).toHaveCount(0);
+    const takeoverRequests = historyRequests
+      .slice(takeoverRequestStart)
+      .filter((url) => !url.searchParams.get("anchor_date"));
+    expect(takeoverRequests.length).toBeLessThanOrEqual(5);
+    expect(
+      takeoverRequests
+        .map((url) => url.searchParams.get("cursor"))
+        .filter((cursor): cursor is string => cursor !== null)
+        .every((cursor) => cursor.startsWith("fresh-root-")),
+    ).toBe(true);
     await page.getByRole("button", { name: "Calendar" }).click();
     await expect(
       page.getByRole("button", { name: "July 31, 2026, 1 Entry" }),
@@ -1978,13 +2137,15 @@ for (const rootOutcome of ["success", "failure"] as const) {
     ).toBeEnabled();
     await page.getByRole("button", { name: "Load older Entries" }).click();
     await expect(page.locator(`#entry-${freshContinuation.id}`)).toBeVisible();
+    await expect(readingCard).toHaveCount(1);
+    await expect(movingCard).toHaveCount(1);
     expect(
-      historyRequests.some((url) =>
+      historyRequests.slice(takeoverRequestStart).some((url) =>
         url.searchParams.get("cursor")?.startsWith("old-root"),
       ),
     ).toBe(false);
     expect(
-      historyRequests.some((url) =>
+      historyRequests.slice(takeoverRequestStart).some((url) =>
         url.searchParams.get("cursor")?.startsWith("stale-rebuild"),
       ),
     ).toBe(false);

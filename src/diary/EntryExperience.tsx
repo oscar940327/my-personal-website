@@ -41,6 +41,7 @@ type ReadingAnchor = {
 };
 
 type HistoryWindow = {
+  anchorDate: string;
   entries: EntryRecord[];
   newerCursor: string | null;
   olderCursor: string | null;
@@ -158,7 +159,7 @@ function mergeEntries(
 
 async function rebuildHistoryWindow(
   accessToken: string,
-  anchorDate: string,
+  anchorDate: string | undefined,
   activeEntry: EntryRecord,
   readingEntry: EntryRecord | null,
   targetEntryCount: number,
@@ -267,6 +268,7 @@ async function rebuildHistoryWindow(
   }
 
   return {
+    anchorDate: initialPage.anchor_date,
     entries: rebuiltEntries,
     newerCursor,
     olderCursor,
@@ -542,8 +544,8 @@ export function EntryExperience({
     }
 
     async function refreshHistory() {
-      if (committedHistoryRecovery.current) {
-        committedHistoryRecovery.current = null;
+      const currentRecovery = committedHistoryRecovery.current;
+      if (currentRecovery) {
         setTimeEditingEntry(null);
         entryTimeReadingAnchor.current = null;
       }
@@ -554,33 +556,54 @@ export function EntryExperience({
       setAdjacentError(null);
       setHistoryState("loading");
       try {
-        const page = await loadHistoryEntries(
-          accessToken,
-          {
-            anchorDate: requestedAnchorDate.current,
-          },
-          controller.signal,
-        );
+        const freshWindow = currentRecovery
+          ? await rebuildHistoryWindow(
+              accessToken,
+              requestedAnchorDate.current,
+              currentRecovery.activeEntry,
+              currentRecovery.readingEntry,
+              currentRecovery.targetEntryCount,
+              controller.signal,
+            )
+          : await loadHistoryEntries(
+              accessToken,
+              {
+                anchorDate: requestedAnchorDate.current,
+              },
+              controller.signal,
+            ).then((page) => ({
+              anchorDate: page.anchor_date,
+              entries: sortEntries(flattenGroups(page.groups)),
+              newerCursor: page.newer_cursor,
+              olderCursor: page.older_cursor,
+            }));
         if (
           !current ||
           !ownsHistoryRequest(request.controller, request.generation)
         ) {
           return;
         }
-        const freshEntries = sortEntries(flattenGroups(page.groups));
-        setAnchorDate(page.anchor_date);
-        setEntries(freshEntries);
-        setOlderCursor(page.older_cursor);
-        setNewerCursor(page.newer_cursor);
+        if (currentRecovery) {
+          pendingHistoryAnchor.current = currentRecovery.readingAnchor;
+        }
+        setAnchorDate(freshWindow.anchorDate);
+        setEntries(freshWindow.entries);
+        setOlderCursor(freshWindow.olderCursor);
+        setNewerCursor(freshWindow.newerCursor);
         setHistoryState("ready");
-        setHistoryRecovery((currentRecovery) =>
-          currentRecovery &&
-          !freshEntries.some(
-            (entry) => entry.id === currentRecovery.activeEntry.id,
-          )
-            ? currentRecovery
-            : null,
-        );
+        if (currentRecovery) {
+          setHistoryRecovery(null);
+          committedHistoryRecovery.current = null;
+        } else {
+          setHistoryRecovery((recovery) =>
+            recovery &&
+            !freshWindow.entries.some(
+              (entry) => entry.id === recovery.activeEntry.id,
+            )
+              ? recovery
+              : null,
+          );
+        }
       } catch {
         if (
           current &&
