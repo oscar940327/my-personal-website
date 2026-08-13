@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const ownerId = "61c2f4ca-2fab-4b50-a0cf-12aac0ec0b24";
 
@@ -1453,6 +1453,336 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
       .slice(saveRequestStart)
       .some((url) => url.searchParams.get("cursor")?.startsWith("old-deep")),
   ).toBe(false);
+});
+
+async function exerciseFailedSaveAcrossMidnightRecovery(
+  page: Page,
+  midnightOutcome: "success" | "failure-then-refresh",
+) {
+  const beforeMidnight = new Date("2026-07-30T23:59:59+08:00");
+  await page.clock.install({ time: beforeMidnight });
+  await page.clock.pauseAt(beforeMidnight);
+  const sessionLifetimeSeconds = 48 * 60 * 60;
+  const accessToken = unsignedAccessToken(ownerId, sessionLifetimeSeconds);
+  await page.addInitScript(
+    ({ lifetimeSeconds, ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + lifetimeSeconds,
+          expires_in: lifetimeSeconds,
+          refresh_token: `failed-save-midnight-${userId}`,
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    {
+      lifetimeSeconds: sessionLifetimeSeconds,
+      ownerAccessToken: accessToken,
+      userId: ownerId,
+    },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+
+  const readingEntry = entry(
+    `failed-save-midnight-reading-${midnightOutcome}`,
+    "2026-07-30",
+    "2026-07-30T20:59:00.123456Z",
+    `Deep reading Entry A survives ${midnightOutcome}.`,
+  );
+  const movingBefore = entry(
+    `failed-save-midnight-moving-${midnightOutcome}`,
+    "2026-07-30",
+    "2026-07-30T20:58:00.123456Z",
+    `Changed active Entry B survives ${midnightOutcome}.`,
+  );
+  const movingAfter = {
+    ...movingBefore,
+    entry_at: "2026-07-31T01:00:00.654321Z",
+    owner_date: "2026-07-31",
+  };
+  const denseEntries = Array.from({ length: 77 }, (_, rank) =>
+    entry(
+      `failed-save-midnight-dense-${midnightOutcome}-${rank}`,
+      "2026-07-30",
+      `2026-07-30T${String(23 - Math.floor(rank / 60)).padStart(2, "0")}:${String(59 - (rank % 60)).padStart(2, "0")}:00Z`,
+      `Dense midnight Entry ${rank + 1}.`,
+    ),
+  );
+  const oldTail = entry(
+    `failed-save-midnight-old-tail-${midnightOutcome}`,
+    "2026-07-30",
+    "2026-07-30T20:57:00Z",
+    "Old snapshot tail must never be requested after Save commits.",
+  );
+  const freshTail = entry(
+    `failed-save-midnight-fresh-tail-${midnightOutcome}`,
+    "2026-07-30",
+    "2026-07-30T20:57:00Z",
+    "Fresh snapshot tail remains pageable after recovery.",
+  );
+  const historyRequests: URL[] = [];
+  let mutationCommitted = false;
+  let freshRootAttempts = 0;
+  let midnightCursorFailed = false;
+
+  await page.route("**/entries/*/entry-time", async (route) => {
+    mutationCommitted = true;
+    await route.fulfill({
+      contentType: "application/json",
+      json: movingAfter,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    const url = new URL(route.request().url());
+    historyRequests.push(url);
+    const cursor = url.searchParams.get("cursor");
+
+    if (!mutationCommitted) {
+      const oldPage = /^old-failed-save-older-(\d)$/.exec(cursor ?? "");
+      if (oldPage) {
+        const pageNumber = Number(oldPage[1]);
+        const pageEntries =
+          pageNumber < 3
+            ? denseEntries.slice(pageNumber * 20, (pageNumber + 1) * 20)
+            : [
+                ...denseEntries.slice(60),
+                readingEntry,
+                movingBefore,
+                oldTail,
+              ];
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-30",
+            groups: [{ date: "2026-07-30", entries: pageEntries }],
+            newer_cursor: null,
+            older_cursor:
+              pageNumber < 3
+                ? `old-failed-save-older-${pageNumber + 1}`
+                : "old-failed-save-continuation",
+          },
+          status: 200,
+        });
+        return;
+      }
+      expect(cursor).toBeNull();
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-30",
+          groups: [
+            { date: "2026-07-30", entries: denseEntries.slice(0, 20) },
+          ],
+          newer_cursor: null,
+          older_cursor: "old-failed-save-older-1",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (!cursor) {
+      freshRootAttempts += 1;
+      if (freshRootAttempts === 1) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "Save rebuild unavailable after commit" },
+          status: 503,
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-31",
+          groups: [
+            { date: "2026-07-31", entries: [movingAfter] },
+            { date: "2026-07-30", entries: denseEntries.slice(0, 19) },
+          ],
+          newer_cursor: null,
+          older_cursor: "fresh-failed-save-older-1",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (
+      midnightOutcome === "failure-then-refresh" &&
+      freshRootAttempts === 2 &&
+      !midnightCursorFailed
+    ) {
+      midnightCursorFailed = true;
+      await route.fulfill({
+        contentType: "application/json",
+        json: { detail: "Midnight rebuild cursor temporarily unavailable" },
+        status: 503,
+      });
+      return;
+    }
+
+    const freshOlderPage = /^fresh-failed-save-older-(\d)$/.exec(cursor);
+    if (freshOlderPage) {
+      const pageNumber = Number(freshOlderPage[1]);
+      const pageEntries =
+        pageNumber < 3
+          ? denseEntries.slice(
+              19 + (pageNumber - 1) * 20,
+              19 + pageNumber * 20,
+            )
+          : [...denseEntries.slice(59), readingEntry, freshTail];
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-30",
+          groups: [{ date: "2026-07-30", entries: pageEntries }],
+          newer_cursor: null,
+          older_cursor:
+            pageNumber < 3
+              ? `fresh-failed-save-older-${pageNumber + 1}`
+              : "fresh-failed-save-continuation",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (cursor === "fresh-failed-save-continuation") {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-30",
+          groups: [],
+          newer_cursor: null,
+          older_cursor: null,
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    throw new Error(`Unexpected History cursor: ${cursor}`);
+  });
+
+  await page.goto("diary.html");
+  await page.addStyleTag({
+    content: ".diary-history-groups { overflow-anchor: none; }",
+  });
+  const loadOlder = page.getByRole("button", { name: "Load older Entries" });
+  for (const expectedCount of [40, 60, 80]) {
+    await loadOlder.click();
+    await expect(page.locator("article.diary-entry")).toHaveCount(
+      expectedCount,
+    );
+  }
+  const readingCard = page.locator(`#entry-${readingEntry.id}`);
+  const movingCard = page.locator(`#entry-${movingBefore.id}`);
+  await page.evaluate(() => document.fonts.ready);
+  await page.clock.runFor(32);
+  await readingCard.evaluate((element) => {
+    element.scrollIntoView({ block: "start" });
+  });
+  const readingTopBefore = await readingCard.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  await movingCard.getByText("Entry actions", { exact: true }).click();
+  await movingCard
+    .getByRole("button", { name: "Change Entry Time" })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+  await editor.getByLabel("New Entry Time").fill("2026-07-31T09:00");
+  await editor.getByRole("button", { name: "Save Entry Time" }).click();
+  const refreshHistory = page.getByRole("button", { name: "Refresh History" });
+  await expect(editor).not.toBeVisible();
+  await expect(refreshHistory).toBeVisible();
+
+  const midnightRequestStart = historyRequests.length;
+  await page.clock.runFor(2_000);
+  let successfulRebuildRequestStart = midnightRequestStart;
+  if (midnightOutcome === "failure-then-refresh") {
+    await expect(page.getByRole("alert")).toContainText(
+      "Diary could not load history.",
+    );
+    await expect(refreshHistory).toBeVisible();
+    expect(
+      historyRequests
+        .slice(midnightRequestStart)
+        .some((url) =>
+          url.searchParams.get("cursor")?.startsWith("fresh-failed-save-"),
+        ),
+    ).toBe(true);
+    successfulRebuildRequestStart = historyRequests.length;
+    await refreshHistory.click();
+  }
+
+  await expect(refreshHistory).toHaveCount(0);
+  await expect(readingCard).toHaveCount(1);
+  await expect(movingCard).toHaveCount(1);
+  await expect
+    .poll(() =>
+      readingCard.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(readingTopBefore, 0);
+  const recoveryRequests = historyRequests.slice(midnightRequestStart);
+  const successfulRebuildRequests = historyRequests.slice(
+    successfulRebuildRequestStart,
+  );
+  expect(successfulRebuildRequests.length).toBeGreaterThanOrEqual(1);
+  expect(successfulRebuildRequests.length).toBeLessThanOrEqual(5);
+  expect(
+    successfulRebuildRequests.filter(
+      (url) => url.searchParams.get("cursor") === null,
+    ),
+  ).toHaveLength(1);
+  expect(
+    successfulRebuildRequests
+      .map((url) => url.searchParams.get("cursor"))
+      .filter((cursor): cursor is string => cursor !== null)
+      .every((cursor) => cursor.startsWith("fresh-failed-save-")),
+  ).toBe(true);
+  expect(
+    recoveryRequests.some((url) =>
+      url.searchParams.get("cursor")?.startsWith("old-failed-save-"),
+    ),
+  ).toBe(false);
+}
+
+test("failed Save rebuild crosses midnight and recovers deep reading A with changed B", async ({
+  page,
+}) => {
+  await exerciseFailedSaveAcrossMidnightRecovery(page, "success");
+});
+
+test("failed Save rebuild keeps midnight failure retryable through Refresh", async ({
+  page,
+}) => {
+  await exerciseFailedSaveAcrossMidnightRecovery(
+    page,
+    "failure-then-refresh",
+  );
 });
 
 for (const rootOutcome of ["success", "failure"] as const) {

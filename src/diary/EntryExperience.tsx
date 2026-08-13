@@ -993,7 +993,6 @@ export function EntryExperience({
         const committedEntry = changedEntry;
         setEntries((current) => mergeEntries(current, [committedEntry]));
         setHistoryState("ready");
-        committedHistoryRecovery.current = null;
         setTimeEditingEntry(null);
         entryTimeReadingAnchor.current = null;
         setAdjacentError(
@@ -1045,6 +1044,7 @@ export function EntryExperience({
       setNewerCursor(rebuilt.newerCursor);
       setHistoryState("ready");
       setHistoryRecovery(null);
+      committedHistoryRecovery.current = null;
       setAdjacentError(null);
     } catch {
       if (ownsHistoryRequest(request.controller, request.generation)) {
@@ -1197,6 +1197,7 @@ export function EntryExperience({
     setAdjacentLoad(null);
     setAdjacentError(null);
     setHistoryRecovery(null);
+    committedHistoryRecovery.current = null;
     setHistoryRecoveryState("idle");
     setEntries([]);
     setOlderCursor(null);
