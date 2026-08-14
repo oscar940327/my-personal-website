@@ -971,9 +971,12 @@ for (const scenario of [
     });
     await page.addStyleTag({
       content: `
-        html[data-ticket08-delayed-layout] .diary-history-groups {
-          font-family: serif;
-          letter-spacing: 0.04em;
+        html[data-ticket08-delayed-layout] #entry-${movingAfter.id} {
+          margin-bottom: 96px;
+        }
+
+        html[data-ticket08-user-layout] #entry-${movingAfter.id} {
+          margin-bottom: 192px;
         }
 
         .diary-history-groups {
@@ -1011,18 +1014,22 @@ for (const scenario of [
     page.getByRole("button", { name: "Refresh History" }),
   ).toHaveCount(0);
   if (delayedLayoutShift) {
+    await expect
+      .poll(() =>
+        readingCard.evaluate((element) => element.getBoundingClientRect().top),
+      )
+      .toBeCloseTo(topBefore, 0);
     await page.evaluate(async () => {
       await new Promise<void>((resolve) => {
         window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => resolve());
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+              window.requestAnimationFrame(() => resolve());
+            });
+          });
         });
       });
       document.documentElement.dataset.ticket08DelayedLayout = "true";
-      (
-        window as typeof window & {
-          __ticket08ReleaseFontReady: () => void;
-        }
-      ).__ticket08ReleaseFontReady();
     });
   }
   await expect
@@ -1030,6 +1037,20 @@ for (const scenario of [
       readingCard.evaluate((element) => element.getBoundingClientRect().top),
     )
     .toBeCloseTo(topBefore, 0);
+  if (delayedLayoutShift) {
+    const scrollBeforeUserIntent = await page.evaluate(() => window.scrollY);
+    await page.mouse.wheel(0, 160);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(scrollBeforeUserIntent);
+    const scrollAfterUserIntent = await page.evaluate(() => window.scrollY);
+    await page.evaluate(() => {
+      document.documentElement.dataset.ticket08UserLayout = "true";
+    });
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(scrollAfterUserIntent, 0);
+  }
   const rebuildRequests = historyRequests.slice(rebuildRequestStart);
   expect(rebuildRequests.length).toBeLessThanOrEqual(5);
   expect(
@@ -1059,6 +1080,32 @@ for (const scenario of [
       url.searchParams.get("cursor")?.startsWith("old-"),
     ),
   ).toBe(false);
+  if (delayedLayoutShift) {
+    await page.getByRole("button", { name: "Calendar" }).click();
+    await expect(page.getByText("July 2026")).toBeVisible();
+    await page.getByRole("button", { name: "History" }).click();
+    await readingCard.evaluate((element) => {
+      element.scrollIntoView({ block: "start" });
+      window.scrollBy({ top: 160 });
+    });
+    const scrollAfterNavigation = await page.evaluate(() => window.scrollY);
+    await page.evaluate(async () => {
+      (
+        window as typeof window & {
+          __ticket08ReleaseFontReady: () => void;
+        }
+      ).__ticket08ReleaseFontReady();
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      });
+    });
+    expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(
+      scrollAfterNavigation,
+      0,
+    );
+  }
 });
 }
 
