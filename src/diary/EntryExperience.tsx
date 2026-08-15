@@ -43,6 +43,7 @@ type ReadingAnchor = {
 type PendingHistoryAnchor = {
   anchor: ReadingAnchor | null;
   trackRecoveryLayout: boolean;
+  viewportOwnership: number;
 };
 
 type HistoryWindow = {
@@ -55,8 +56,7 @@ type HistoryWindow = {
 type HistoryRecovery = {
   anchorDate: string;
   activeEntry: EntryRecord;
-  readingEntry: EntryRecord | null;
-  readingAnchor: ReadingAnchor | null;
+  navigationAnchor: ReadingAnchor;
   targetEntryCount: number;
 };
 
@@ -166,7 +166,6 @@ async function rebuildHistoryWindow(
   accessToken: string,
   anchorDate: string | undefined,
   activeEntry: EntryRecord,
-  readingEntry: EntryRecord | null,
   targetEntryCount: number,
   signal: AbortSignal,
 ): Promise<HistoryWindow> {
@@ -188,10 +187,7 @@ async function rebuildHistoryWindow(
   );
   let requestCount = 1;
   let lastAmbiguousDirection: HistoryDirection | null = null;
-  const mandatoryEntries =
-    readingEntry && readingEntry.id !== activeEntry.id
-      ? [activeEntry, readingEntry]
-      : [activeEntry];
+  const mandatoryEntries = [activeEntry];
 
   while (
     (rebuiltEntries.length < boundedTargetEntryCount ||
@@ -459,6 +455,8 @@ export function EntryExperience({
     "idle",
   );
   const [entryTimeError, setEntryTimeError] = useState<string | null>(null);
+  const [entryTimeConfirmation, setEntryTimeConfirmation] =
+    useState<string | null>(null);
   const [revisionHistoryEntry, setRevisionHistoryEntry] =
     useState<EntryRecord | null>(null);
   const [revisionHistory, setRevisionHistory] =
@@ -484,6 +482,7 @@ export function EntryExperience({
   const historyRequestController = useRef<AbortController | null>(null);
   const revisionHistoryController = useRef<AbortController | null>(null);
   const historyGeneration = useRef(0);
+  const viewportOwnership = useRef(0);
   const newerBoundary = useRef<HTMLDivElement>(null);
   const olderBoundary = useRef<HTMLDivElement>(null);
   const userScrolledHistory = useRef(false);
@@ -492,6 +491,12 @@ export function EntryExperience({
     const cancel = activeHistoryAnchorRestoration.current;
     activeHistoryAnchorRestoration.current = null;
     cancel?.();
+  }
+
+  function claimViewportOwnership() {
+    viewportOwnership.current += 1;
+    pendingHistoryAnchor.current = null;
+    cancelHistoryAnchorRestoration();
   }
 
   function retireHistoryOwnership(retireOperationState = false) {
@@ -542,7 +547,11 @@ export function EntryExperience({
       return;
     }
     pendingHistoryAnchor.current = null;
-    const { anchor, trackRecoveryLayout } = pendingAnchor;
+    const {
+      anchor,
+      trackRecoveryLayout,
+      viewportOwnership: anchorViewportOwnership,
+    } = pendingAnchor;
     if (!anchor) {
       return;
     }
@@ -569,7 +578,10 @@ export function EntryExperience({
       if (cancelled) {
         return;
       }
-      if (historyGeneration.current !== generation) {
+      if (
+        historyGeneration.current !== generation ||
+        viewportOwnership.current !== anchorViewportOwnership
+      ) {
         cancel();
         return;
       }
@@ -577,7 +589,11 @@ export function EntryExperience({
       if (frame === null) {
         frame = window.requestAnimationFrame(() => {
           frame = null;
-          if (!cancelled && historyGeneration.current === generation) {
+          if (
+            !cancelled &&
+            historyGeneration.current === generation &&
+            viewportOwnership.current === anchorViewportOwnership
+          ) {
             restoreReadingAnchor(anchor);
           }
         });
@@ -627,6 +643,7 @@ export function EntryExperience({
 
     async function refreshHistory() {
       const currentRecovery = committedHistoryRecovery.current;
+      const recoveryViewportOwnership = viewportOwnership.current;
       if (currentRecovery) {
         setTimeEditingEntry(null);
         entryTimeReadingAnchor.current = null;
@@ -641,9 +658,8 @@ export function EntryExperience({
         const freshWindow = currentRecovery
           ? await rebuildHistoryWindow(
               accessToken,
-              requestedAnchorDate.current,
+              currentRecovery.anchorDate,
               currentRecovery.activeEntry,
-              currentRecovery.readingEntry,
               currentRecovery.targetEntryCount,
               controller.signal,
             )
@@ -665,10 +681,14 @@ export function EntryExperience({
         ) {
           return;
         }
-        if (currentRecovery) {
+        if (
+          currentRecovery &&
+          viewportOwnership.current === recoveryViewportOwnership
+        ) {
           pendingHistoryAnchor.current = {
-            anchor: currentRecovery.readingAnchor,
+            anchor: currentRecovery.navigationAnchor,
             trackRecoveryLayout: true,
+            viewportOwnership: recoveryViewportOwnership,
           };
         }
         setAnchorDate(freshWindow.anchorDate);
@@ -722,7 +742,7 @@ export function EntryExperience({
   useEffect(() => {
     function markUserScrollIntent() {
       userScrolledHistory.current = true;
-      cancelHistoryAnchorRestoration();
+      claimViewportOwnership();
     }
     function markKeyboardScrollIntent(event: globalThis.KeyboardEvent) {
       if (
@@ -740,10 +760,12 @@ export function EntryExperience({
       }
     }
     function markPointerIntent(event: PointerEvent) {
-      cancelHistoryAnchorRestoration();
+      const verticalScrollbarStart =
+        document.documentElement.clientWidth < window.innerWidth
+          ? document.documentElement.clientWidth
+          : window.innerWidth - 2;
       if (
-        event.clientX >= document.documentElement.clientWidth ||
-        event.clientY >= document.documentElement.clientHeight
+        event.clientX >= verticalScrollbarStart
       ) {
         markUserScrollIntent();
       }
@@ -814,6 +836,7 @@ export function EntryExperience({
     pendingHistoryAnchor.current = {
       anchor: captureReadingAnchor(),
       trackRecoveryLayout: false,
+      viewportOwnership: viewportOwnership.current,
     };
     setAdjacentError(null);
     setAdjacentLoad(direction);
@@ -1000,6 +1023,7 @@ export function EntryExperience({
       taipeiDateTimeInputValue(new Date(entry.entry_at)),
     );
     setEntryTimeError(null);
+    setEntryTimeConfirmation(null);
   }
 
   function closeEntryTimeEditor() {
@@ -1031,23 +1055,21 @@ export function EntryExperience({
       );
       changedEntry = changed;
       const readingAnchor = entryTimeReadingAnchor.current;
-      const readingEntryId = readingAnchor?.elementId.replace(
-        /^entry-/,
-        "",
-      );
-      const readingEntry =
-        readingEntryId === changed.id
-          ? changed
-          : entries.find((entry) => entry.id === readingEntryId);
-      recovery = {
-        anchorDate: readingEntry?.owner_date ?? changed.owner_date,
-        activeEntry: changed,
-        readingEntry: readingEntry ?? null,
-        readingAnchor,
-        targetEntryCount: Math.max(
-          HISTORY_PAGE_LIMIT,
-          Math.min(entries.length, HISTORY_REBUILD_ENTRY_LIMIT),
+      const navigationViewportTop = Math.max(
+        0,
+        Math.min(
+          readingAnchor?.viewportTop ?? 96,
+          Math.max(window.innerHeight - 1, 0),
         ),
+      );
+      recovery = {
+        anchorDate: changed.owner_date,
+        activeEntry: changed,
+        navigationAnchor: {
+          elementId: `entry-${changed.id}`,
+          viewportTop: navigationViewportTop,
+        },
+        targetEntryCount: HISTORY_PAGE_LIMIT,
       };
       committedHistoryRecovery.current = recovery;
       setOlderCursor(null);
@@ -1059,12 +1081,17 @@ export function EntryExperience({
       setCalendarRequestVersion((current) => current + 1);
       setAdjacentLoad(null);
       setAdjacentError(null);
+      setEntryTimeConfirmation(
+        `Entry Time changed to ${changed.owner_date} (Asia/Taipei).`,
+      );
+      setTimeEditingEntry(null);
+      entryTimeReadingAnchor.current = null;
       rebuildRequest = beginHistoryRequest();
+      const recoveryViewportOwnership = viewportOwnership.current;
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
         recovery.anchorDate,
         recovery.activeEntry,
-        recovery.readingEntry,
         recovery.targetEntryCount,
         rebuildRequest.controller.signal,
       );
@@ -1076,18 +1103,19 @@ export function EntryExperience({
       ) {
         return;
       }
-      pendingHistoryAnchor.current = {
-        anchor: readingAnchor,
-        trackRecoveryLayout: true,
-      };
+      if (viewportOwnership.current === recoveryViewportOwnership) {
+        pendingHistoryAnchor.current = {
+          anchor: recovery.navigationAnchor,
+          trackRecoveryLayout: true,
+          viewportOwnership: recoveryViewportOwnership,
+        };
+      }
       setEntries(rebuilt.entries);
       setOlderCursor(rebuilt.olderCursor);
       setNewerCursor(rebuilt.newerCursor);
       setHistoryState("ready");
       setHistoryRecovery(null);
       committedHistoryRecovery.current = null;
-      setTimeEditingEntry(null);
-      entryTimeReadingAnchor.current = null;
     } catch {
       const ownsFailedRebuild =
         rebuildRequest === null ||
@@ -1135,13 +1163,13 @@ export function EntryExperience({
         ? document.activeElement
         : null;
     const request = beginHistoryRequest();
+    const recoveryViewportOwnership = viewportOwnership.current;
     setHistoryRecoveryState("loading");
     try {
       const rebuilt = await rebuildHistoryWindow(
         accessToken,
         recovery.anchorDate,
         recovery.activeEntry,
-        recovery.readingEntry,
         recovery.targetEntryCount,
         request.controller.signal,
       );
@@ -1151,10 +1179,13 @@ export function EntryExperience({
       if (document.activeElement === recoveryTrigger) {
         recoveryTrigger?.blur();
       }
-      pendingHistoryAnchor.current = {
-        anchor: recovery.readingAnchor,
-        trackRecoveryLayout: true,
-      };
+      if (viewportOwnership.current === recoveryViewportOwnership) {
+        pendingHistoryAnchor.current = {
+          anchor: recovery.navigationAnchor,
+          trackRecoveryLayout: true,
+          viewportOwnership: recoveryViewportOwnership,
+        };
+      }
       setEntries(rebuilt.entries);
       setOlderCursor(rebuilt.olderCursor);
       setNewerCursor(rebuilt.newerCursor);
@@ -1307,6 +1338,7 @@ export function EntryExperience({
   }
 
   function jumpToHistoryDate(date: string) {
+    claimViewportOwnership();
     retireHistoryOwnership();
     pendingHistoryAnchor.current = null;
     userScrolledHistory.current = false;
@@ -1328,8 +1360,13 @@ export function EntryExperience({
   }
 
   function showCalendar() {
-    cancelHistoryAnchorRestoration();
+    claimViewportOwnership();
     setSurface("calendar");
+  }
+
+  function showHistory() {
+    claimViewportOwnership();
+    setSurface("history");
   }
 
   function retryHistory() {
@@ -1366,7 +1403,7 @@ export function EntryExperience({
         <button
           aria-pressed={surface === "history"}
           className="diary-secondary-action"
-          onClick={() => setSurface("history")}
+          onClick={showHistory}
           type="button"
         >
           History
@@ -1524,6 +1561,12 @@ export function EntryExperience({
           <span>Entry saved for {savedEntry.owner_date}.</span>
           <button onClick={viewSavedEntry}>View new Entry</button>
         </aside>
+      ) : null}
+
+      {entryTimeConfirmation ? (
+        <p className="diary-save-confirmation" role="status">
+          {entryTimeConfirmation}
+        </p>
       ) : null}
 
       {savedEntryPreviewOpen && savedEntry ? (

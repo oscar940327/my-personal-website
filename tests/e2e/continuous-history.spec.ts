@@ -689,11 +689,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await page.getByRole("button", { name: "Refresh History" }).click();
   await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
   await expect(page.locator("article.diary-entry")).toHaveCount(60);
-  await expect
-    .poll(() =>
-      readingCard.evaluate((element) => element.getBoundingClientRect().top),
-    )
-    .toBeCloseTo(topBefore, 0);
+  await expect(movingEntry).toBeInViewport();
 
   await page.getByRole("button", { name: "Load newer Entries" }).click();
   await expect(page.getByText("Fresh snapshot newer page.")).toBeVisible();
@@ -701,7 +697,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   await expect(page.getByText("Fresh snapshot oldest page.")).toBeVisible();
 
   const recoveryRequests = historyRequests.slice(recoveryRequestStart);
-  expect(recoveryRequests.length).toBe(5);
+  expect(recoveryRequests.length).toBeLessThanOrEqual(5);
   expect(
     recoveryRequests.every(
       (url) => Number(url.searchParams.get("limit") ?? "20") <= 20,
@@ -1016,7 +1012,7 @@ for (const scenario of [
   if (delayedLayoutShift) {
     await expect
       .poll(() =>
-        readingCard.evaluate((element) => element.getBoundingClientRect().top),
+        movingCard.evaluate((element) => element.getBoundingClientRect().top),
       )
       .toBeCloseTo(topBefore, 0);
     await page.evaluate(async () => {
@@ -1034,7 +1030,7 @@ for (const scenario of [
   }
   await expect
     .poll(() =>
-      readingCard.evaluate((element) => element.getBoundingClientRect().top),
+      movingCard.evaluate((element) => element.getBoundingClientRect().top),
     )
     .toBeCloseTo(topBefore, 0);
   if (delayedLayoutShift) {
@@ -1109,7 +1105,7 @@ for (const scenario of [
 });
 }
 
-test("Entry Time save and recovery retain a deep reading Entry distinct from the changed Entry", async ({
+test("Entry Time recovery shows the moved Entry without searching past a rank-80 Reading Entry", async ({
   page,
 }) => {
   await page.clock.setFixedTime(new Date("2026-07-30T12:00:00+08:00"));
@@ -1173,7 +1169,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
     entry_at: "2026-07-31T01:00:00.654321Z",
     owner_date: "2026-07-31",
   };
-  const denseEntries = Array.from({ length: 77 }, (_, rank) =>
+  const denseEntries = Array.from({ length: 97 }, (_, rank) =>
     entry(
       `deep-dense-${rank}`,
       "2026-07-29",
@@ -1215,7 +1211,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
       if (oldPage) {
         const pageNumber = Number(oldPage[1]);
         const pageEntries =
-          pageNumber < 3
+          pageNumber < 4
             ? denseEntries.slice(pageNumber * 20, (pageNumber + 1) * 20)
             : [
                 ...denseEntries.slice(60),
@@ -1230,7 +1226,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
             groups: [{ date: "2026-07-29", entries: pageEntries }],
             newer_cursor: null,
             older_cursor:
-              pageNumber < 3
+              pageNumber < 4
                 ? `old-deep-older-${pageNumber + 1}`
                 : "old-deep-older-continuation",
           },
@@ -1347,7 +1343,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
     if (freshOlderPage) {
       const pageNumber = Number(freshOlderPage[1]);
       const pageEntries =
-        pageNumber < 3
+        pageNumber < 4
           ? denseEntries.slice(pageNumber * 20, (pageNumber + 1) * 20)
           : [
               ...denseEntries.slice(60),
@@ -1362,7 +1358,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
           groups: [{ date: "2026-07-29", entries: pageEntries }],
           newer_cursor: `fresh-deep-${generation}-newer-continuation`,
           older_cursor:
-            pageNumber < 3
+            pageNumber < 4
               ? `fresh-deep-${generation}-older-${pageNumber + 1}`
               : `fresh-deep-${generation}-older-continuation`,
         },
@@ -1391,7 +1387,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
     content: ".diary-history-groups { overflow-anchor: none; }",
   });
   const loadOlder = page.getByRole("button", { name: "Load older Entries" });
-  for (const expectedCount of [40, 60, 80]) {
+  for (const expectedCount of [40, 60, 80, 100]) {
     await loadOlder.click();
     await expect(page.locator("article.diary-entry")).toHaveCount(
       expectedCount,
@@ -1399,7 +1395,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
   }
   const readingCard = page.locator(`#entry-${readingEntry.id}`);
   const movingCard = page.locator(`#entry-${movingBefore.id}`);
-  const settlePreviousAnchorAndPositionReadingEntry = async () => {
+  const settleLayoutAndPositionReadingEntry = async () => {
     await page.evaluate(async () => {
       await document.fonts.ready;
       await new Promise<void>((resolve) => {
@@ -1421,7 +1417,8 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
       (element) => element.getBoundingClientRect().top,
     );
   };
-  const saveTopBefore = await settlePreviousAnchorAndPositionReadingEntry();
+  await settleLayoutAndPositionReadingEntry();
+  await expect(readingCard).toBeInViewport();
   await movingCard.getByText("Entry actions", { exact: true }).click();
   await movingCard
     .getByRole("button", { name: "Change Entry Time" })
@@ -1433,15 +1430,12 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
 
   await expect(editor).not.toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
-  await expect(readingCard).toHaveCount(1);
+  await expect(page.getByText("Entry Time changed to 2026-07-30 (Asia/Taipei).", { exact: true })).toBeVisible();
+  await expect(readingCard).toHaveCount(0);
   await expect(movingCard).toHaveCount(1);
-  await expect
-    .poll(() =>
-      readingCard.evaluate((element) => element.getBoundingClientRect().top),
-    )
-    .toBeCloseTo(saveTopBefore, 0);
+  await expect(movingCard).toBeInViewport();
   const saveRequests = historyRequests.slice(saveRequestStart);
-  expect(saveRequests).toHaveLength(5);
+  expect(saveRequests.length).toBeLessThanOrEqual(5);
   expect(saveRequests.filter((url) => !url.searchParams.get("cursor"))).toHaveLength(1);
   expect(
     saveRequests
@@ -1450,8 +1444,9 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
       .every((cursor) => cursor.startsWith("fresh-deep-1-")),
   ).toBe(true);
 
-  const recoveryTopBefore =
-    await settlePreviousAnchorAndPositionReadingEntry();
+  await movingCard.evaluate((element) => {
+    element.scrollIntoView({ block: "start" });
+  });
   await movingCard
     .getByText("Entry actions", { exact: true })
     .evaluate((element: HTMLElement) => element.click());
@@ -1466,15 +1461,12 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
   await refreshHistory.click();
 
   await expect(refreshHistory).toHaveCount(0);
-  await expect(readingCard).toHaveCount(1);
+  await expect(page.getByText("Entry Time changed to 2026-07-31 (Asia/Taipei).", { exact: true })).toBeVisible();
+  await expect(readingCard).toHaveCount(0);
   await expect(movingCard).toHaveCount(1);
-  await expect
-    .poll(() =>
-      readingCard.evaluate((element) => element.getBoundingClientRect().top),
-    )
-    .toBeCloseTo(recoveryTopBefore, 0);
+  await expect(movingCard).toBeInViewport();
   const recoveryRequests = historyRequests.slice(recoveryRequestStart);
-  expect(recoveryRequests).toHaveLength(5);
+  expect(recoveryRequests.length).toBeLessThanOrEqual(5);
   expect(
     recoveryRequests.filter((url) => !url.searchParams.get("cursor")),
   ).toHaveLength(1);
@@ -1488,7 +1480,7 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
   await page.getByRole("button", { name: "Load newer Entries" }).click();
   await expect(page.getByText("Fresh deep newer continuation 2.")).toBeVisible();
   await page.getByRole("button", { name: "Load older Entries" }).click();
-  await expect(page.getByText("Fresh deep older continuation 2.")).toBeVisible();
+  await expect(page.getByText("Dense Entry 21.")).toBeVisible();
   await expect(movingCard).toHaveCount(1);
   expect(
     historyRequests.some((url) =>
@@ -1501,6 +1493,341 @@ test("Entry Time save and recovery retain a deep reading Entry distinct from the
       .some((url) => url.searchParams.get("cursor")?.startsWith("old-deep")),
   ).toBe(false);
 });
+
+for (const viewportIntent of [
+  "wheel",
+  "keyboard",
+  "scrollbar",
+  "calendar",
+  "calendar-date",
+  "calendar-history",
+] as const) {
+  test(`delayed Entry Time recovery yields viewport ownership to ${viewportIntent}`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date("2026-07-30T12:00:00+08:00"));
+    await page.addInitScript(() => {
+      class PassiveIntersectionObserver implements IntersectionObserver {
+        readonly root = null;
+        readonly rootMargin = "0px";
+        readonly scrollMargin = "0px";
+        readonly thresholds: number[] = [];
+        disconnect() {}
+        observe() {}
+        takeRecords(): IntersectionObserverEntry[] {
+          return [];
+        }
+        unobserve() {}
+      }
+      window.IntersectionObserver = PassiveIntersectionObserver;
+    });
+    const accessToken = unsignedAccessToken(ownerId);
+    await page.addInitScript(
+      ({ ownerAccessToken, userId }) => {
+        window.localStorage.setItem(
+          "sb-127-auth-token",
+          JSON.stringify({
+            access_token: ownerAccessToken,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expires_in: 3600,
+            refresh_token: `viewport-ownership-${userId}`,
+            token_type: "bearer",
+            user: {
+              app_metadata: {},
+              aud: "authenticated",
+              created_at: new Date().toISOString(),
+              id: userId,
+              user_metadata: {},
+            },
+          }),
+        );
+      },
+      { ownerAccessToken: accessToken, userId: ownerId },
+    );
+    await page.route("**/health", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { service: "diary-api", status: "ready" },
+        status: 200,
+      });
+    });
+    await page.route("**/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { owner_id: ownerId, status: "authenticated" },
+        status: 200,
+      });
+    });
+
+    const movingBefore = entry(
+      `ownership-moving-${viewportIntent}`,
+      "2026-07-29",
+      "2026-07-29T15:00:00.123456Z",
+      `Viewport ownership moving Entry for ${viewportIntent}.\n${"Long content keeps the History scrollable.\n".repeat(10)}`,
+    );
+    const movingAfter = {
+      ...movingBefore,
+      entry_at: "2026-07-30T01:00:00.654321Z",
+      owner_date: "2026-07-30",
+    };
+    const fillers = Array.from({ length: 19 }, (_, rank) =>
+      entry(
+        `ownership-filler-${viewportIntent}-${rank}`,
+        "2026-07-29",
+        `2026-07-29T${String(14 - Math.floor(rank / 60)).padStart(2, "0")}:${String(59 - (rank % 60)).padStart(2, "0")}:00Z`,
+        `Ownership filler ${rank + 1} for ${viewportIntent}.\n${"Scrollable filler content.\n".repeat(8)}`,
+      ),
+    );
+    const freshOlder = entry(
+      `ownership-older-${viewportIntent}`,
+      "2026-07-28",
+      "2026-07-28T01:00:00Z",
+      `Fresh older cursor result for ${viewportIntent}.`,
+    );
+    const selectedDateEntry = entry(
+      `ownership-selected-${viewportIntent}`,
+      "2026-07-28",
+      "2026-07-28T02:00:00Z",
+      `Selected Calendar date owns the History for ${viewportIntent}.`,
+    );
+    let mutationCommitted = false;
+    let markRecoveryStarted!: () => void;
+    const recoveryStarted = new Promise<void>((resolve) => {
+      markRecoveryStarted = resolve;
+    });
+    let releaseRecovery!: () => void;
+    const recoveryRelease = new Promise<void>((resolve) => {
+      releaseRecovery = resolve;
+    });
+    let recoveryRootSeen = false;
+
+    await page.route("**/entries/*/entry-time", async (route) => {
+      mutationCommitted = true;
+      await route.fulfill({
+        contentType: "application/json",
+        json: movingAfter,
+        status: 200,
+      });
+    });
+    await page.route("**/entries/history**", async (route) => {
+      const url = new URL(route.request().url());
+      const cursor = url.searchParams.get("cursor");
+      if (cursor === `ownership-older-cursor-${viewportIntent}`) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-30",
+            groups: [{ date: "2026-07-28", entries: [freshOlder] }],
+            newer_cursor: `ownership-newer-cursor-${viewportIntent}`,
+            older_cursor: null,
+          },
+          status: 200,
+        });
+        return;
+      }
+      if (cursor === `ownership-newer-cursor-${viewportIntent}`) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-30",
+            groups: [],
+            newer_cursor: null,
+            older_cursor: `ownership-older-cursor-${viewportIntent}`,
+          },
+          status: 200,
+        });
+        return;
+      }
+      if (url.searchParams.get("anchor_date") === "2026-07-28") {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-28",
+            groups: [{ date: "2026-07-28", entries: [selectedDateEntry] }],
+            newer_cursor: null,
+            older_cursor: null,
+          },
+          status: 200,
+        });
+        return;
+      }
+      if (mutationCommitted) {
+        if (!recoveryRootSeen) {
+          recoveryRootSeen = true;
+          markRecoveryStarted();
+        }
+        await recoveryRelease;
+        try {
+          await route.fulfill({
+            contentType: "application/json",
+            json: {
+              anchor_date: "2026-07-30",
+              groups: [
+                { date: "2026-07-30", entries: [movingAfter] },
+                { date: "2026-07-29", entries: fillers },
+              ],
+              newer_cursor: `ownership-newer-cursor-${viewportIntent}`,
+              older_cursor: `ownership-older-cursor-${viewportIntent}`,
+            },
+            status: 200,
+          });
+        } catch {
+          // Calendar-date navigation retires this request generation.
+        }
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [{ date: "2026-07-29", entries: [movingBefore, ...fillers] }],
+          newer_cursor: null,
+          older_cursor: null,
+        },
+        status: 200,
+      });
+    });
+    await page.route("**/entries/calendar**", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          days: [
+            { date: "2026-07-28", entry_count: 1 },
+            { date: "2026-07-30", entry_count: 1 },
+          ],
+          month: "2026-07",
+          time_zone: "Asia/Taipei",
+        },
+        status: 200,
+      });
+    });
+
+    await page.goto("diary.html?date=2026-07-29");
+    await page.evaluate(() => {
+      let releaseFontReady!: () => void;
+      const controlledFontReady = new Promise<FontFaceSet>((resolve) => {
+        releaseFontReady = () => resolve(document.fonts);
+      });
+      Object.defineProperty(document.fonts, "ready", {
+        configurable: true,
+        get: () => controlledFontReady,
+      });
+      (
+        window as typeof window & {
+          __ticket08ReleaseOwnershipFontReady: () => void;
+        }
+      ).__ticket08ReleaseOwnershipFontReady = releaseFontReady;
+    });
+    await page.addStyleTag({
+      content: `
+        .diary-history-groups { overflow-anchor: none; }
+        html[data-ticket08-ownership-layout] #entry-${movingAfter.id} {
+          margin-bottom: 240px;
+        }
+      `,
+    });
+    const movingCard = page.locator(`#entry-${movingBefore.id}`);
+    await movingCard.evaluate((element) => {
+      element.scrollIntoView({ block: "center" });
+    });
+    await movingCard.getByText("Entry actions", { exact: true }).click();
+    await movingCard
+      .getByRole("button", { name: "Change Entry Time" })
+      .click();
+    const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+    await editor.getByLabel("New Entry Time").fill("2026-07-30T09:00");
+    await editor.getByRole("button", { name: "Save Entry Time" }).click();
+    await recoveryStarted;
+
+    const settleScroll = () =>
+      page.evaluate(async () => {
+        for (let frame = 0; frame < 8; frame += 1) {
+          await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => resolve());
+          });
+        }
+      });
+    let ownedScrollY: number | null = null;
+    if (viewportIntent === "wheel") {
+      const beforeIntent = await page.evaluate(() => window.scrollY);
+      await page.mouse.wheel(0, 420);
+      await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeGreaterThan(beforeIntent);
+      await settleScroll();
+      ownedScrollY = await page.evaluate(() => window.scrollY);
+    } else if (viewportIntent === "keyboard") {
+      const beforeIntent = await page.evaluate(() => window.scrollY);
+      await page.keyboard.press("PageDown");
+      await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeGreaterThan(beforeIntent);
+      await settleScroll();
+      await page.waitForTimeout(300);
+      ownedScrollY = await page.evaluate(() => window.scrollY);
+    } else if (viewportIntent === "scrollbar") {
+      const viewport = page.viewportSize();
+      expect(viewport).not.toBeNull();
+      await page.mouse.click((viewport?.width ?? 1280) - 2, Math.floor((viewport?.height ?? 720) * 0.8));
+      await settleScroll();
+      ownedScrollY = await page.evaluate(() => window.scrollY);
+    } else {
+      await page
+        .getByRole("button", { name: "Calendar" })
+        .evaluate((button: HTMLButtonElement) => button.click());
+      await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
+      if (viewportIntent === "calendar-date") {
+        await page
+          .getByRole("button", { name: "July 28, 2026, 1 Entry" })
+          .click();
+        await expect(page.getByText(selectedDateEntry.original_content)).toBeVisible();
+      } else if (viewportIntent === "calendar-history") {
+        await page.getByRole("button", { name: "History" }).click();
+        const beforeIntent = await page.evaluate(() => window.scrollY);
+        await page.mouse.wheel(0, 420);
+        await expect
+          .poll(() => page.evaluate(() => window.scrollY))
+          .toBeGreaterThan(beforeIntent);
+        await settleScroll();
+        ownedScrollY = await page.evaluate(() => window.scrollY);
+      }
+    }
+
+    releaseRecovery();
+    if (viewportIntent === "calendar") {
+      await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
+      await page.getByRole("button", { name: "History" }).click();
+      await page.evaluate(() => window.scrollBy({ top: 420 }));
+      await settleScroll();
+      ownedScrollY = await page.evaluate(() => window.scrollY);
+    }
+    if (viewportIntent === "calendar-date") {
+      await expect(page.getByText(selectedDateEntry.original_content)).toBeVisible();
+      await expect(page.locator(`#entry-${movingAfter.id}`)).toHaveCount(0);
+    } else {
+      await expect(page.locator(`#entry-${movingAfter.id}`)).toHaveCount(1);
+    }
+    await page.evaluate(() => {
+      document.documentElement.dataset.ticket08OwnershipLayout = "true";
+      (
+        window as typeof window & {
+          __ticket08ReleaseOwnershipFontReady: () => void;
+        }
+      ).__ticket08ReleaseOwnershipFontReady();
+    });
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => resolve());
+          });
+        }),
+    );
+    if (ownedScrollY !== null) {
+      expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(ownedScrollY, 0);
+    }
+  });
+}
 
 async function exerciseFailedSaveAcrossMidnightRecovery(
   page: Page,
@@ -1592,7 +1919,6 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
   const historyRequests: URL[] = [];
   let mutationCommitted = false;
   let freshRootAttempts = 0;
-  let midnightCursorFailed = false;
 
   await page.route("**/entries/*/entry-time", async (route) => {
     mutationCommitted = true;
@@ -1661,6 +1987,17 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
         });
         return;
       }
+      if (
+        midnightOutcome === "failure-then-refresh" &&
+        freshRootAttempts === 2
+      ) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "Midnight rebuild temporarily unavailable" },
+          status: 503,
+        });
+        return;
+      }
       await route.fulfill({
         contentType: "application/json",
         json: {
@@ -1673,20 +2010,6 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
           older_cursor: "fresh-failed-save-older-1",
         },
         status: 200,
-      });
-      return;
-    }
-
-    if (
-      midnightOutcome === "failure-then-refresh" &&
-      freshRootAttempts === 2 &&
-      !midnightCursorFailed
-    ) {
-      midnightCursorFailed = true;
-      await route.fulfill({
-        contentType: "application/json",
-        json: { detail: "Midnight rebuild cursor temporarily unavailable" },
-        status: 503,
       });
       return;
     }
@@ -1752,9 +2075,6 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
   await readingCard.evaluate((element) => {
     element.scrollIntoView({ block: "start" });
   });
-  const readingTopBefore = await readingCard.evaluate(
-    (element) => element.getBoundingClientRect().top,
-  );
   await movingCard.getByText("Entry actions", { exact: true }).click();
   await movingCard
     .getByRole("button", { name: "Change Entry Time" })
@@ -1777,8 +2097,10 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
     expect(
       historyRequests
         .slice(midnightRequestStart)
-        .some((url) =>
-          url.searchParams.get("cursor")?.startsWith("fresh-failed-save-"),
+        .some(
+          (url) =>
+            url.searchParams.get("anchor_date") === "2026-07-31" &&
+            url.searchParams.get("cursor") === null,
         ),
     ).toBe(true);
     successfulRebuildRequestStart = historyRequests.length;
@@ -1786,13 +2108,9 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
   }
 
   await expect(refreshHistory).toHaveCount(0);
-  await expect(readingCard).toHaveCount(1);
+  await expect(readingCard).toHaveCount(0);
   await expect(movingCard).toHaveCount(1);
-  await expect
-    .poll(() =>
-      readingCard.evaluate((element) => element.getBoundingClientRect().top),
-    )
-    .toBeCloseTo(readingTopBefore, 0);
+  await expect(movingCard).toBeInViewport();
   const recoveryRequests = historyRequests.slice(midnightRequestStart);
   const successfulRebuildRequests = historyRequests.slice(
     successfulRebuildRequestStart,
@@ -1817,13 +2135,13 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
   ).toBe(false);
 }
 
-test("failed Save rebuild crosses midnight and recovers deep reading A with changed B", async ({
+test("failed Save rebuild crosses midnight and recovers moved Entry B without deep reading A", async ({
   page,
 }) => {
   await exerciseFailedSaveAcrossMidnightRecovery(page, "success");
 });
 
-test("failed Save rebuild keeps midnight failure retryable through Refresh", async ({
+test("failed Save rebuild keeps a midnight moved-Entry failure retryable through Refresh", async ({
   page,
 }) => {
   await exerciseFailedSaveAcrossMidnightRecovery(
@@ -2193,6 +2511,7 @@ for (const rootOutcome of ["success", "failure"] as const) {
       `Fresh root continuation after ${rootOutcome}.`,
     );
     let mutationCommitted = false;
+    let mutationRebuildDelayed = false;
     let rootRequests = 0;
     let markRootStarted!: () => void;
     const rootStarted = new Promise<void>((resolve) => {
@@ -2336,14 +2655,18 @@ for (const rootOutcome of ["success", "failure"] as const) {
         });
         return;
       }
-      if (url.searchParams.get("anchor_date") === "2026-07-30") {
+      if (
+        url.searchParams.get("anchor_date") === "2026-07-31" &&
+        !mutationRebuildDelayed
+      ) {
+        mutationRebuildDelayed = true;
         markRebuildStarted();
         await rebuildRelease;
         try {
           await route.fulfill({
             contentType: "application/json",
             json: {
-              anchor_date: "2026-07-30",
+              anchor_date: "2026-07-31",
               groups: [
                 { date: "2026-07-30", entries: [movingBefore] },
               ],
@@ -2431,9 +2754,6 @@ for (const rootOutcome of ["success", "failure"] as const) {
         window.scrollBy({ top: Math.ceil(previousBottom) });
       }
     });
-    const readingTopBefore = await readingCard.evaluate(
-      (element) => element.getBoundingClientRect().top,
-    );
     expect(
       await page.evaluate(() =>
         Array.from(
@@ -2480,22 +2800,14 @@ for (const rootOutcome of ["success", "failure"] as const) {
     if (rootOutcome === "failure") {
       await page.getByRole("button", { name: "Retry History" }).click();
     }
-    await expect(readingCard).toHaveCount(1);
+    await expect(readingCard).toHaveCount(0);
     await expect(page.locator(`#entry-${movingAfter.id}`)).toHaveCount(1);
     await expect(page.locator(`#entry-${freshRootCompanion.id}`)).toBeVisible();
-    await expect
-      .poll(() =>
-        readingCard.evaluate(
-          (element) => element.getBoundingClientRect().top,
-        ),
-      )
-      .toBeCloseTo(readingTopBefore, 0);
+    await expect(page.locator(`#entry-${movingAfter.id}`)).toBeInViewport();
     await expect(
       page.getByRole("button", { name: "Refresh History" }),
     ).toHaveCount(0);
-    const takeoverRequests = historyRequests
-      .slice(takeoverRequestStart)
-      .filter((url) => !url.searchParams.get("anchor_date"));
+    const takeoverRequests = historyRequests.slice(takeoverRequestStart);
     expect(takeoverRequests.length).toBeLessThanOrEqual(5);
     expect(
       takeoverRequests
@@ -2513,8 +2825,8 @@ for (const rootOutcome of ["success", "failure"] as const) {
       page.getByRole("button", { name: "Load older Entries" }),
     ).toBeEnabled();
     await page.getByRole("button", { name: "Load older Entries" }).click();
-    await expect(page.locator(`#entry-${freshContinuation.id}`)).toBeVisible();
-    await expect(readingCard).toHaveCount(1);
+    await expect(page.getByText(`Fresh older filler 1 after ${rootOutcome}.`)).toBeVisible();
+    await expect(readingCard).toHaveCount(0);
     await expect(movingCard).toHaveCount(1);
     expect(
       historyRequests.slice(takeoverRequestStart).some((url) =>
