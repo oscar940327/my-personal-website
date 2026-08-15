@@ -234,6 +234,28 @@ export async function loadHistoryEntries(
   return (await response.json()) as HistoryPage;
 }
 
+export async function loadEntryHistoryWindow(
+  accessToken: string,
+  entryId: string,
+  signal: AbortSignal,
+): Promise<HistoryPage> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/${entryId}/history-window`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not load the Entry-centered History window");
+  }
+  return (await response.json()) as HistoryPage;
+}
+
 export async function loadTodayEntries(
   accessToken: string,
   signal: AbortSignal,

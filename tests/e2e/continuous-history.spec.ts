@@ -464,6 +464,36 @@ test("committed Entry Time change disables stale cursors until fresh History rec
       status: 200,
     });
   });
+  await page.route("**/entries/*/history-window", async (route) => {
+    freshRebuildAttempts += 1;
+    if (freshRebuildAttempts === 1) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { detail: "fresh snapshot temporarily unavailable" },
+        status: 503,
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-28",
+        groups: [
+          {
+            date: "2026-07-28",
+            entries: [
+              ...denseRecoveryEntries.slice(31, 40),
+              movingAfter,
+              ...recoveryTailEntries.slice(0, 10),
+            ],
+          },
+        ],
+        newer_cursor: "new-snapshot-newer",
+        older_cursor: "new-snapshot-older-next",
+      },
+      status: 200,
+    });
+  });
   await page.route("**/entries/history**", async (route) => {
     const url = new URL(route.request().url());
     historyRequests.push(url);
@@ -688,7 +718,7 @@ test("committed Entry Time change disables stale cursors until fresh History rec
   const recoveryRequestStart = historyRequests.length;
   await page.getByRole("button", { name: "Refresh History" }).click();
   await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
-  await expect(page.locator("article.diary-entry")).toHaveCount(60);
+  await expect(page.locator("article.diary-entry")).toHaveCount(20);
   await expect(movingEntry).toBeInViewport();
 
   await page.getByRole("button", { name: "Load newer Entries" }).click();
@@ -811,6 +841,33 @@ for (const scenario of [
     await route.fulfill({
       contentType: "application/json",
       json: movingAfter,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/*/history-window", async (route) => {
+    freshRootRequests += 1;
+    if (rebuildPath === "recovery" && freshRootRequests === 1) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { detail: "first fresh snapshot unavailable" },
+        status: 503,
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-30",
+        groups: [
+          { date: "2026-07-30", entries: [movingAfter] },
+          {
+            date: "2026-07-29",
+            entries: [readingEntry, ...initialFillers.slice(0, 18)],
+          },
+        ],
+        newer_cursor: "fresh-newer-continuation",
+        older_cursor: "fresh-older-1",
+      },
       status: 200,
     });
   });
@@ -1049,21 +1106,7 @@ for (const scenario of [
   }
   const rebuildRequests = historyRequests.slice(rebuildRequestStart);
   expect(rebuildRequests.length).toBeLessThanOrEqual(5);
-  expect(
-    rebuildRequests.filter(
-      (url) => url.searchParams.get("cursor") === null,
-    ),
-  ).toHaveLength(1);
-  expect(
-    rebuildRequests.filter(
-      (url) => url.searchParams.get("direction") === "newer",
-    ),
-  ).toHaveLength(1);
-  expect(
-    rebuildRequests.filter(
-      (url) => url.searchParams.get("direction") === "older",
-    ),
-  ).toHaveLength(0);
+  expect(rebuildRequests).toHaveLength(0);
 
   await page.getByRole("button", { name: "Load older Entries" }).click();
   await expect(page.getByText("Older lifetime Entry 1.")).toBeVisible();
@@ -1198,6 +1241,39 @@ test("Entry Time recovery shows the moved Entry without searching past a rank-80
     await route.fulfill({
       contentType: "application/json",
       json: mutationNumber === 1 ? movingAfterSave : movingAfterRecovery,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/*/history-window", async (route) => {
+    const generation = mutationNumber;
+    freshRootAttempts[generation - 1] += 1;
+    if (generation === 2 && freshRootAttempts[1] === 1) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { detail: "force committed recovery" },
+        status: 503,
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: generation === 1 ? "2026-07-30" : "2026-07-31",
+        groups: [
+          {
+            date: generation === 1 ? "2026-07-30" : "2026-07-31",
+            entries: [
+              generation === 1 ? movingAfterSave : movingAfterRecovery,
+            ],
+          },
+          {
+            date: "2026-07-29",
+            entries: denseEntries.slice(78, 97),
+          },
+        ],
+        newer_cursor: `fresh-deep-${generation}-newer-continuation`,
+        older_cursor: `fresh-deep-${generation}-older-continuation`,
+      },
       status: 200,
     });
   });
@@ -1435,14 +1511,7 @@ test("Entry Time recovery shows the moved Entry without searching past a rank-80
   await expect(movingCard).toHaveCount(1);
   await expect(movingCard).toBeInViewport();
   const saveRequests = historyRequests.slice(saveRequestStart);
-  expect(saveRequests.length).toBeLessThanOrEqual(5);
-  expect(saveRequests.filter((url) => !url.searchParams.get("cursor"))).toHaveLength(1);
-  expect(
-    saveRequests
-      .map((url) => url.searchParams.get("cursor"))
-      .filter((cursor): cursor is string => cursor !== null)
-      .every((cursor) => cursor.startsWith("fresh-deep-1-")),
-  ).toBe(true);
+  expect(saveRequests).toHaveLength(0);
 
   await movingCard.evaluate((element) => {
     element.scrollIntoView({ block: "start" });
@@ -1466,21 +1535,12 @@ test("Entry Time recovery shows the moved Entry without searching past a rank-80
   await expect(movingCard).toHaveCount(1);
   await expect(movingCard).toBeInViewport();
   const recoveryRequests = historyRequests.slice(recoveryRequestStart);
-  expect(recoveryRequests.length).toBeLessThanOrEqual(5);
-  expect(
-    recoveryRequests.filter((url) => !url.searchParams.get("cursor")),
-  ).toHaveLength(1);
-  expect(
-    recoveryRequests
-      .map((url) => url.searchParams.get("cursor"))
-      .filter((cursor): cursor is string => cursor !== null)
-      .every((cursor) => cursor.startsWith("fresh-deep-2-")),
-  ).toBe(true);
+  expect(recoveryRequests).toHaveLength(0);
 
   await page.getByRole("button", { name: "Load newer Entries" }).click();
   await expect(page.getByText("Fresh deep newer continuation 2.")).toBeVisible();
   await page.getByRole("button", { name: "Load older Entries" }).click();
-  await expect(page.getByText("Dense Entry 21.")).toBeVisible();
+  await expect(page.getByText("Fresh deep older continuation 2.")).toBeVisible();
   await expect(movingCard).toHaveCount(1);
   expect(
     historyRequests.some((url) =>
@@ -1608,6 +1668,30 @@ for (const viewportIntent of [
         json: movingAfter,
         status: 200,
       });
+    });
+    await page.route("**/entries/*/history-window", async (route) => {
+      if (!recoveryRootSeen) {
+        recoveryRootSeen = true;
+        markRecoveryStarted();
+      }
+      await recoveryRelease;
+      try {
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-30",
+            groups: [
+              { date: "2026-07-30", entries: [movingAfter] },
+              { date: "2026-07-29", entries: fillers },
+            ],
+            newer_cursor: `ownership-newer-cursor-${viewportIntent}`,
+            older_cursor: `ownership-older-cursor-${viewportIntent}`,
+          },
+          status: 200,
+        });
+      } catch {
+        // Calendar-date navigation retires this request generation.
+      }
     });
     await page.route("**/entries/history**", async (route) => {
       const url = new URL(route.request().url());
@@ -1917,6 +2001,7 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
     "Fresh snapshot tail remains pageable after recovery.",
   );
   const historyRequests: URL[] = [];
+  const historyWindowRequests: URL[] = [];
   let mutationCommitted = false;
   let freshRootAttempts = 0;
 
@@ -1925,6 +2010,42 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
     await route.fulfill({
       contentType: "application/json",
       json: movingAfter,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/*/history-window", async (route) => {
+    historyWindowRequests.push(new URL(route.request().url()));
+    freshRootAttempts += 1;
+    if (freshRootAttempts === 1) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { detail: "Save rebuild unavailable after commit" },
+        status: 503,
+      });
+      return;
+    }
+    if (
+      midnightOutcome === "failure-then-refresh" &&
+      freshRootAttempts === 2
+    ) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { detail: "Midnight rebuild temporarily unavailable" },
+        status: 503,
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-31",
+        groups: [
+          { date: "2026-07-31", entries: [movingAfter] },
+          { date: "2026-07-30", entries: denseEntries.slice(0, 19) },
+        ],
+        newer_cursor: null,
+        older_cursor: "fresh-failed-save-older-1",
+      },
       status: 200,
     });
   });
@@ -2086,7 +2207,7 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
   await expect(editor).not.toBeVisible();
   await expect(refreshHistory).toBeVisible();
 
-  const midnightRequestStart = historyRequests.length;
+  const midnightRequestStart = historyWindowRequests.length;
   await page.clock.runFor(2_000);
   let successfulRebuildRequestStart = midnightRequestStart;
   if (midnightOutcome === "failure-then-refresh") {
@@ -2095,15 +2216,13 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
     );
     await expect(refreshHistory).toBeVisible();
     expect(
-      historyRequests
+      historyWindowRequests
         .slice(midnightRequestStart)
-        .some(
-          (url) =>
-            url.searchParams.get("anchor_date") === "2026-07-31" &&
-            url.searchParams.get("cursor") === null,
+        .some((url) =>
+          url.pathname.endsWith(`/${movingAfter.id}/history-window`),
         ),
     ).toBe(true);
-    successfulRebuildRequestStart = historyRequests.length;
+    successfulRebuildRequestStart = historyWindowRequests.length;
     await refreshHistory.click();
   }
 
@@ -2111,28 +2230,19 @@ async function exerciseFailedSaveAcrossMidnightRecovery(
   await expect(readingCard).toHaveCount(0);
   await expect(movingCard).toHaveCount(1);
   await expect(movingCard).toBeInViewport();
-  const recoveryRequests = historyRequests.slice(midnightRequestStart);
-  const successfulRebuildRequests = historyRequests.slice(
+  const recoveryRequests = historyWindowRequests.slice(midnightRequestStart);
+  const successfulRebuildRequests = historyWindowRequests.slice(
     successfulRebuildRequestStart,
   );
-  expect(successfulRebuildRequests.length).toBeGreaterThanOrEqual(1);
-  expect(successfulRebuildRequests.length).toBeLessThanOrEqual(5);
+  expect(successfulRebuildRequests).toHaveLength(1);
+  expect(recoveryRequests).toHaveLength(
+    midnightOutcome === "failure-then-refresh" ? 2 : 1,
+  );
   expect(
-    successfulRebuildRequests.filter(
-      (url) => url.searchParams.get("cursor") === null,
+    recoveryRequests.every((url) =>
+      url.pathname.endsWith(`/${movingAfter.id}/history-window`),
     ),
-  ).toHaveLength(1);
-  expect(
-    successfulRebuildRequests
-      .map((url) => url.searchParams.get("cursor"))
-      .filter((cursor): cursor is string => cursor !== null)
-      .every((cursor) => cursor.startsWith("fresh-failed-save-")),
   ).toBe(true);
-  expect(
-    recoveryRequests.some((url) =>
-      url.searchParams.get("cursor")?.startsWith("old-failed-save-"),
-    ),
-  ).toBe(false);
 }
 
 test("failed Save rebuild crosses midnight and recovers moved Entry B without deep reading A", async ({
@@ -2530,6 +2640,7 @@ for (const rootOutcome of ["success", "failure"] as const) {
       markRebuildSettled = resolve;
     });
     const historyRequests: URL[] = [];
+    const historyWindowRequests: URL[] = [];
     let calendarRequests = 0;
 
     await page.route("**/entries/*/entry-time", async (route) => {
@@ -2537,6 +2648,65 @@ for (const rootOutcome of ["success", "failure"] as const) {
       await route.fulfill({
         contentType: "application/json",
         json: movingAfter,
+        status: 200,
+      });
+    });
+    await page.route("**/entries/*/history-window", async (route) => {
+      historyWindowRequests.push(new URL(route.request().url()));
+      if (!mutationRebuildDelayed) {
+        mutationRebuildDelayed = true;
+        markRebuildStarted();
+        await rebuildRelease;
+        try {
+          await route.fulfill({
+            contentType: "application/json",
+            json: {
+              anchor_date: "2026-07-30",
+              groups: [
+                { date: "2026-07-30", entries: [movingBefore] },
+              ],
+              newer_cursor: "stale-rebuild-newer",
+              older_cursor: "stale-rebuild-older",
+            },
+            status: 200,
+          });
+        } catch {
+          // Root takeover should abort the delayed mutation rebuild.
+        } finally {
+          markRebuildSettled();
+        }
+        return;
+      }
+
+      rootRequests += 1;
+      if (rootRequests === 1) {
+        markRootStarted();
+      }
+      if (rootOutcome === "failure" && rootRequests === 1) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "midnight root unavailable" },
+          status: 503,
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-31",
+          groups: [
+            {
+              date: "2026-07-31",
+              entries: [
+                freshRootCompanion,
+                movingAfter,
+                ...freshRootFillers,
+              ],
+            },
+          ],
+          newer_cursor: "fresh-root-newer",
+          older_cursor: "fresh-root-older-1",
+        },
         status: 200,
       });
     });
@@ -2776,7 +2946,8 @@ for (const rootOutcome of ["success", "failure"] as const) {
     await editor.getByLabel("New Entry Time").fill("2026-07-31T09:00");
     await editor.getByRole("button", { name: "Save Entry Time" }).click();
     await rebuildStarted;
-    const takeoverRequestStart = historyRequests.length;
+    const ordinaryTakeoverRequestStart = historyRequests.length;
+    const takeoverRequestStart = historyWindowRequests.length;
     await page.clock.runFor(2_000);
     await rootStarted;
 
@@ -2807,13 +2978,12 @@ for (const rootOutcome of ["success", "failure"] as const) {
     await expect(
       page.getByRole("button", { name: "Refresh History" }),
     ).toHaveCount(0);
-    const takeoverRequests = historyRequests.slice(takeoverRequestStart);
-    expect(takeoverRequests.length).toBeLessThanOrEqual(5);
+    const takeoverRequests = historyWindowRequests.slice(takeoverRequestStart);
+    expect(takeoverRequests).toHaveLength(rootOutcome === "failure" ? 2 : 1);
     expect(
-      takeoverRequests
-        .map((url) => url.searchParams.get("cursor"))
-        .filter((cursor): cursor is string => cursor !== null)
-        .every((cursor) => cursor.startsWith("fresh-root-")),
+      takeoverRequests.every((url) =>
+        url.pathname.endsWith(`/${movingAfter.id}/history-window`),
+      ),
     ).toBe(true);
     await page.getByRole("button", { name: "Calendar" }).click();
     await expect(
@@ -2829,12 +2999,12 @@ for (const rootOutcome of ["success", "failure"] as const) {
     await expect(readingCard).toHaveCount(0);
     await expect(movingCard).toHaveCount(1);
     expect(
-      historyRequests.slice(takeoverRequestStart).some((url) =>
+      historyRequests.slice(ordinaryTakeoverRequestStart).some((url) =>
         url.searchParams.get("cursor")?.startsWith("old-root"),
       ),
     ).toBe(false);
     expect(
-      historyRequests.slice(takeoverRequestStart).some((url) =>
+      historyRequests.slice(ordinaryTakeoverRequestStart).some((url) =>
         url.searchParams.get("cursor")?.startsWith("stale-rebuild"),
       ),
     ).toBe(false);
@@ -2927,12 +3097,36 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
     let mutationCommitted = false;
     let freshRebuildAttempted = false;
     const historyRequests: URL[] = [];
+    const historyWindowRequests: URL[] = [];
 
     await page.route("**/entries/*/entry-time", async (route) => {
       mutationCommitted = true;
       await route.fulfill({
         contentType: "application/json",
         json: movingAfter,
+        status: 200,
+      });
+    });
+    await page.route("**/entries/*/history-window", async (route) => {
+      historyWindowRequests.push(new URL(route.request().url()));
+      if (!freshRebuildAttempted && rebuildOutcome === "recovery") {
+        freshRebuildAttempted = true;
+        await route.fulfill({
+          contentType: "application/json",
+          json: { detail: "fresh snapshot unavailable" },
+          status: 503,
+        });
+        return;
+      }
+      freshRebuildAttempted = true;
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [{ date: "2026-07-29", entries: [movingAfter] }],
+          newer_cursor: "new-root-newer",
+          older_cursor: "new-root-older",
+        },
         status: 200,
       });
     });
@@ -3051,6 +3245,8 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
       await expect(page.getByRole("button", { name: "Load newer Entries" })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Load older Entries" })).toHaveCount(0);
     } else {
+      expect(historyWindowRequests).toHaveLength(1);
+      await page.getByRole("button", { name: "Load older Entries" }).click();
       expect(
         historyRequests.some(
           (url) => url.searchParams.get("cursor") === "new-root-older",
@@ -3062,6 +3258,366 @@ for (const rebuildOutcome of ["success", "recovery"] as const) {
         ),
       ).toBe(false);
     }
+  });
+}
+
+test("Entry Time recovery uses one bounded Entry-centered window beyond the former 100-Entry reach", async ({
+  page,
+}) => {
+  const accessToken = unsignedAccessToken(ownerId);
+  await page.addInitScript(
+    ({ ownerAccessToken, userId }) => {
+      window.localStorage.setItem(
+        "sb-127-auth-token",
+        JSON.stringify({
+          access_token: ownerAccessToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: "entry-centered-window-refresh-token",
+          token_type: "bearer",
+          user: {
+            app_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            id: userId,
+            user_metadata: {},
+          },
+        }),
+      );
+    },
+    { ownerAccessToken: accessToken, userId: ownerId },
+  );
+  await page.route("**/health", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { service: "diary-api", status: "ready" },
+      status: 200,
+    });
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { owner_id: ownerId, status: "authenticated" },
+      status: 200,
+    });
+  });
+
+  const movingBefore = entry(
+    "entry-centered-moving",
+    "2026-07-29",
+    "2026-07-29T12:00:00.000001Z",
+    "Moved Entry starts in the visible History page.",
+  );
+  const movingAfter = {
+    ...movingBefore,
+    entry_at: "2026-07-30T00:00:00.000001Z",
+    owner_date: "2026-07-30",
+  };
+  const initialEntries = [
+    movingBefore,
+    ...Array.from({ length: 19 }, (_, index) =>
+      entry(
+        `entry-centered-initial-${index}`,
+        "2026-07-29",
+        `2026-07-29T11:${String(59 - index).padStart(2, "0")}:00Z`,
+        `Initial Entry ${index + 1}.`,
+      ),
+    ),
+  ];
+  const laterDestinationEntries = Array.from({ length: 120 }, (_, index) =>
+    entry(
+      `entry-centered-later-${index}`,
+      "2026-07-30",
+      `2026-07-30T${String(23 - Math.floor(index / 60)).padStart(2, "0")}:${String(59 - (index % 60)).padStart(2, "0")}:00Z`,
+      `Destination Entry ahead of moved target ${index + 1}.`,
+    ),
+  );
+  const centeredOlder = entry(
+    "entry-centered-older-result",
+    "2026-07-28",
+    "2026-07-28T12:00:00Z",
+    "Older continuation from centered snapshot.",
+  );
+  const centeredNewer = entry(
+    "entry-centered-newer-result",
+    "2026-07-31",
+    "2026-07-31T12:00:00Z",
+    "Newer continuation from centered snapshot.",
+  );
+  let mutationCommitted = false;
+  const ordinaryRecoveryRequests: URL[] = [];
+  const centeredWindowRequests: URL[] = [];
+
+  await page.route("**/entries/*/entry-time", async (route) => {
+    mutationCommitted = true;
+    await route.fulfill({
+      contentType: "application/json",
+      json: movingAfter,
+      status: 200,
+    });
+  });
+  await page.route("**/entries/*/history-window", async (route) => {
+    centeredWindowRequests.push(new URL(route.request().url()));
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-30",
+        groups: [
+          {
+            date: "2026-07-30",
+            entries: [
+              ...laterDestinationEntries.slice(111, 120),
+              movingAfter,
+            ],
+          },
+          {
+            date: "2026-07-29",
+            entries: initialEntries.slice(1, 11),
+          },
+        ],
+        newer_cursor: "entry-centered-newer-cursor",
+        older_cursor: "entry-centered-older-cursor",
+      },
+      status: 200,
+    });
+  });
+  await page.route("**/entries/history**", async (route) => {
+    const url = new URL(route.request().url());
+    const cursor = url.searchParams.get("cursor");
+    if (cursor === "entry-centered-newer-cursor") {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-30",
+          groups: [{ date: "2026-07-31", entries: [centeredNewer] }],
+          newer_cursor: null,
+          older_cursor: "entry-centered-older-cursor",
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (cursor === "entry-centered-older-cursor") {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-30",
+          groups: [{ date: "2026-07-28", entries: [centeredOlder] }],
+          newer_cursor: null,
+          older_cursor: null,
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (!mutationCommitted) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [{ date: "2026-07-29", entries: initialEntries }],
+          newer_cursor: null,
+          older_cursor: "old-initial-cursor",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    ordinaryRecoveryRequests.push(url);
+    const scanPage = cursor?.startsWith("fixed-scan-")
+      ? Number(cursor.replace("fixed-scan-", ""))
+      : 0;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2026-07-30",
+        groups: [
+          {
+            date: "2026-07-30",
+            entries: laterDestinationEntries.slice(
+              scanPage * 20,
+              (scanPage + 1) * 20,
+            ),
+          },
+        ],
+        newer_cursor: null,
+        older_cursor: `fixed-scan-${scanPage + 1}`,
+      },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html?date=2026-07-29");
+  const movingCard = page.locator(`#entry-${movingBefore.id}`);
+  await movingCard.getByText("Entry actions", { exact: true }).click();
+  await movingCard
+    .getByRole("button", { name: "Change Entry Time" })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Change Entry Time" });
+  await editor.getByLabel("New Entry Time").fill("2026-07-30T08:00");
+  await editor.getByRole("button", { name: "Save Entry Time" }).click();
+
+  await expect(editor).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Refresh History" })).toHaveCount(0);
+  await expect(movingCard).toHaveCount(1);
+  await expect(movingCard).toBeInViewport();
+  await expect(
+    page.getByText(
+      "Entry Time changed to 2026-07-30 (Asia/Taipei).",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(centeredWindowRequests).toHaveLength(1);
+  expect(
+    centeredWindowRequests[0].pathname.endsWith(
+      `/entries/${movingBefore.id}/history-window`,
+    ),
+  ).toBe(true);
+  expect(ordinaryRecoveryRequests).toHaveLength(0);
+  await expect(page.locator("article.diary-entry")).toHaveCount(20);
+
+  await page.getByRole("button", { name: "Load newer Entries" }).click();
+  await expect(page.getByText(centeredNewer.original_content)).toBeVisible();
+  await page.getByRole("button", { name: "Load older Entries" }).click();
+  await expect(page.getByText(centeredOlder.original_content)).toBeVisible();
+  const renderedIds = await page.locator("article.diary-entry").evaluateAll(
+    (elements) => elements.map((element) => element.id),
+  );
+  expect(renderedIds).toHaveLength(new Set(renderedIds).size);
+});
+
+for (const direction of ["older", "newer"] as const) {
+  test(`delayed ordinary ${direction} pagination preserves its Ticket 04 anchor after user intent`, async ({
+    page,
+  }) => {
+    const accessToken = unsignedAccessToken(ownerId);
+    await page.addInitScript(
+      ({ ownerAccessToken, userId }) => {
+        window.localStorage.setItem(
+          "sb-127-auth-token",
+          JSON.stringify({
+            access_token: ownerAccessToken,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expires_in: 3600,
+            refresh_token: `ordinary-anchor-${userId}`,
+            token_type: "bearer",
+            user: {
+              app_metadata: {},
+              aud: "authenticated",
+              created_at: new Date().toISOString(),
+              id: userId,
+              user_metadata: {},
+            },
+          }),
+        );
+      },
+      { ownerAccessToken: accessToken, userId: ownerId },
+    );
+    await page.route("**/health", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { service: "diary-api", status: "ready" },
+        status: 200,
+      });
+    });
+    await page.route("**/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { owner_id: ownerId, status: "authenticated" },
+        status: 200,
+      });
+    });
+
+    const initialEntries = Array.from({ length: 20 }, (_, index) =>
+      entry(
+        `ordinary-${direction}-${index}`,
+        "2026-07-29",
+        `2026-07-29T${String(23 - index).padStart(2, "0")}:00:00Z`,
+        `Ordinary ${direction} anchor Entry ${index + 1}.\n${"Tall content.\n".repeat(6)}`,
+      ),
+    );
+    const adjacentEntry = entry(
+      `ordinary-${direction}-result`,
+      direction === "older" ? "2026-07-28" : "2026-07-30",
+      direction === "older"
+        ? "2026-07-28T12:00:00Z"
+        : "2026-07-30T12:00:00Z",
+      `Delayed ordinary ${direction} result.`,
+    );
+    let releaseAdjacent!: () => void;
+    const adjacentGate = new Promise<void>((resolve) => {
+      releaseAdjacent = resolve;
+    });
+    let adjacentStarted!: () => void;
+    const adjacentStart = new Promise<void>((resolve) => {
+      adjacentStarted = resolve;
+    });
+    await page.route("**/entries/history**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("direction") === direction) {
+        adjacentStarted();
+        await adjacentGate;
+        await route.fulfill({
+          contentType: "application/json",
+          json: {
+            anchor_date: "2026-07-29",
+            groups: [{ date: adjacentEntry.owner_date, entries: [adjacentEntry] }],
+            newer_cursor: direction === "newer" ? null : "ordinary-newer",
+            older_cursor: direction === "older" ? null : "ordinary-older",
+          },
+          status: 200,
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2026-07-29",
+          groups: [{ date: "2026-07-29", entries: initialEntries }],
+          newer_cursor: "ordinary-newer",
+          older_cursor: "ordinary-older",
+        },
+        status: 200,
+      });
+    });
+
+    await page.goto("diary.html?date=2026-07-29");
+    await page.addStyleTag({
+      content: ".diary-history-groups { overflow-anchor: none; }",
+    });
+    const readingCard = page.locator(`#entry-${initialEntries[10].id}`);
+    await readingCard.evaluate((element) => {
+      element.scrollIntoView({ block: "start" });
+    });
+    const originalTop = await readingCard.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    await page
+      .getByRole("button", {
+        name: direction === "older" ? "Load older Entries" : "Load newer Entries",
+      })
+      .evaluate((element: HTMLButtonElement) => element.click());
+    await adjacentStart;
+    if (direction === "older") {
+      await page.mouse.wheel(0, 160);
+    } else {
+      await page.keyboard.press("PageDown");
+      await page.waitForTimeout(300);
+    }
+    await page.addStyleTag({
+      content: ".diary-history-groups { padding-top: 80px; }",
+    });
+    releaseAdjacent();
+
+    await expect(page.getByText(adjacentEntry.original_content)).toBeVisible();
+    await expect
+      .poll(() =>
+        readingCard.evaluate(
+          (element) => element.getBoundingClientRect().top,
+        ),
+      )
+      .toBeCloseTo(originalTop, 0);
   });
 }
 

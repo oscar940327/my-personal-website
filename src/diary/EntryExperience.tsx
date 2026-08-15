@@ -19,6 +19,7 @@ import {
   type EntryRevision,
   type EntryRevisionHistory,
   type HistoryDirection,
+  loadEntryHistoryWindow,
   loadEntryRevisions,
   loadHistoryEntries,
   replaceOriginalContent,
@@ -43,7 +44,12 @@ type ReadingAnchor = {
 type PendingHistoryAnchor = {
   anchor: ReadingAnchor | null;
   trackRecoveryLayout: boolean;
-  viewportOwnership: number;
+  recoveryViewportOwnership: number | null;
+};
+
+type ActiveHistoryAnchorRestoration = {
+  cancel: () => void;
+  cancelOnViewportIntent: boolean;
 };
 
 type HistoryWindow = {
@@ -54,15 +60,11 @@ type HistoryWindow = {
 };
 
 type HistoryRecovery = {
-  anchorDate: string;
   activeEntry: EntryRecord;
   navigationAnchor: ReadingAnchor;
-  targetEntryCount: number;
 };
 
 const HISTORY_PAGE_LIMIT = 20;
-const HISTORY_REBUILD_ENTRY_LIMIT = HISTORY_PAGE_LIMIT * 3;
-const HISTORY_ANCHOR_SEARCH_PAGE_LIMIT = 5;
 
 function asTaipeiIso(inputValue: string): string {
   return `${inputValue}:00+08:00`;
@@ -162,117 +164,29 @@ function mergeEntries(
   return sortEntries([...entriesById.values()]);
 }
 
-async function rebuildHistoryWindow(
+async function loadEntryCenteredHistoryWindow(
   accessToken: string,
-  anchorDate: string | undefined,
   activeEntry: EntryRecord,
-  targetEntryCount: number,
   signal: AbortSignal,
 ): Promise<HistoryWindow> {
-  const initialPage = await loadHistoryEntries(
+  const page = await loadEntryHistoryWindow(
     accessToken,
-    {
-      anchorDate,
-      limit: HISTORY_PAGE_LIMIT,
-    },
+    activeEntry.id,
     signal,
   );
-  let rebuiltEntries = sortEntries(flattenGroups(initialPage.groups));
-  let olderCursor = initialPage.older_cursor;
-  let newerCursor = initialPage.newer_cursor;
-  const requestedCursors = new Set<string>();
-  const boundedTargetEntryCount = Math.max(
-    HISTORY_PAGE_LIMIT,
-    Math.min(targetEntryCount, HISTORY_REBUILD_ENTRY_LIMIT),
-  );
-  let requestCount = 1;
-  let lastAmbiguousDirection: HistoryDirection | null = null;
-  const mandatoryEntries = [activeEntry];
-
-  while (
-    (rebuiltEntries.length < boundedTargetEntryCount ||
-      mandatoryEntries.some(
-        (mandatoryEntry) =>
-          !rebuiltEntries.some((entry) => entry.id === mandatoryEntry.id),
-      )) &&
-    requestCount < HISTORY_ANCHOR_SEARCH_PAGE_LIMIT
-  ) {
-    const firstEntry = rebuiltEntries[0];
-    const lastEntry = rebuiltEntries.at(-1);
-    const missingMandatoryEntries = mandatoryEntries.filter(
-      (mandatoryEntry) =>
-        !rebuiltEntries.some((entry) => entry.id === mandatoryEntry.id),
-    );
-    const necessaryDirection =
-      firstEntry &&
-      missingMandatoryEntries.some(
-        (mandatoryEntry) => compareEntries(mandatoryEntry, firstEntry) < 0,
-      ) &&
-      newerCursor
-        ? "newer"
-        : lastEntry &&
-            missingMandatoryEntries.some(
-              (mandatoryEntry) => compareEntries(mandatoryEntry, lastEntry) > 0,
-            ) &&
-            olderCursor
-          ? "older"
-          : null;
-    const ambiguousDirection: HistoryDirection | null =
-      olderCursor && newerCursor
-        ? lastAmbiguousDirection === "older"
-          ? "newer"
-          : "older"
-        : olderCursor
-          ? "older"
-          : newerCursor
-            ? "newer"
-            : null;
-    const direction: HistoryDirection | null =
-      necessaryDirection ?? ambiguousDirection;
-    const cursor = direction === "older" ? olderCursor : newerCursor;
-    const requestKey = direction && cursor ? `${direction}:${cursor}` : null;
-    if (!direction || !cursor || !requestKey || requestedCursors.has(requestKey)) {
-      break;
-    }
-    requestedCursors.add(requestKey);
-    if (!necessaryDirection) {
-      lastAmbiguousDirection = direction;
-    }
-    const page = await loadHistoryEntries(
-      accessToken,
-      {
-        cursor,
-        direction,
-        limit: HISTORY_PAGE_LIMIT,
-      },
-      signal,
-    );
-    rebuiltEntries = mergeEntries(
-      rebuiltEntries,
-      flattenGroups(page.groups),
-    );
-    if (direction === "older") {
-      olderCursor = page.older_cursor;
-    } else {
-      newerCursor = page.newer_cursor;
-    }
-    requestCount += 1;
-  }
-
+  const centeredEntries = sortEntries(flattenGroups(page.groups));
   if (
-    mandatoryEntries.some(
-      (mandatoryEntry) =>
-        !rebuiltEntries.some((entry) => entry.id === mandatoryEntry.id),
-    )
+    centeredEntries.length > HISTORY_PAGE_LIMIT ||
+    !centeredEntries.some((entry) => entry.id === activeEntry.id)
   ) {
-    throw new Error("History rebuild did not locate its mandatory Entries");
+    throw new Error("Entry-centered History window is invalid");
   }
 
   return {
-    anchorDate: initialPage.anchor_date,
-    entries: rebuiltEntries,
-    newerCursor,
-    olderCursor,
+    anchorDate: page.anchor_date,
+    entries: centeredEntries,
+    newerCursor: page.newer_cursor,
+    olderCursor: page.older_cursor,
   };
 }
 
@@ -476,9 +390,8 @@ export function EntryExperience({
   const entryTimeReadingAnchor = useRef<ReadingAnchor | null>(null);
   const committedHistoryRecovery = useRef<HistoryRecovery | null>(null);
   const pendingHistoryAnchor = useRef<PendingHistoryAnchor | null>(null);
-  const activeHistoryAnchorRestoration = useRef<(() => void) | null>(
-    null,
-  );
+  const activeHistoryAnchorRestoration =
+    useRef<ActiveHistoryAnchorRestoration | null>(null);
   const historyRequestController = useRef<AbortController | null>(null);
   const revisionHistoryController = useRef<AbortController | null>(null);
   const historyGeneration = useRef(0);
@@ -487,16 +400,30 @@ export function EntryExperience({
   const olderBoundary = useRef<HTMLDivElement>(null);
   const userScrolledHistory = useRef(false);
 
-  function cancelHistoryAnchorRestoration() {
-    const cancel = activeHistoryAnchorRestoration.current;
+  function cancelHistoryAnchorRestoration(
+    viewportIntentOnly = false,
+  ) {
+    const restoration = activeHistoryAnchorRestoration.current;
+    if (
+      viewportIntentOnly &&
+      restoration &&
+      !restoration.cancelOnViewportIntent
+    ) {
+      return;
+    }
     activeHistoryAnchorRestoration.current = null;
-    cancel?.();
+    restoration?.cancel();
   }
 
   function claimViewportOwnership() {
     viewportOwnership.current += 1;
-    pendingHistoryAnchor.current = null;
-    cancelHistoryAnchorRestoration();
+    if (
+      pendingHistoryAnchor.current &&
+      pendingHistoryAnchor.current.recoveryViewportOwnership !== null
+    ) {
+      pendingHistoryAnchor.current = null;
+    }
+    cancelHistoryAnchorRestoration(true);
   }
 
   function retireHistoryOwnership(retireOperationState = false) {
@@ -550,7 +477,7 @@ export function EntryExperience({
     const {
       anchor,
       trackRecoveryLayout,
-      viewportOwnership: anchorViewportOwnership,
+      recoveryViewportOwnership,
     } = pendingAnchor;
     if (!anchor) {
       return;
@@ -559,6 +486,7 @@ export function EntryExperience({
     let cancelled = false;
     let frame: number | null = null;
     let observer: ResizeObserver | null = null;
+    let restoration: ActiveHistoryAnchorRestoration | null = null;
 
     const cancel = () => {
       if (cancelled) {
@@ -569,7 +497,7 @@ export function EntryExperience({
       if (frame !== null) {
         window.cancelAnimationFrame(frame);
       }
-      if (activeHistoryAnchorRestoration.current === cancel) {
+      if (activeHistoryAnchorRestoration.current?.cancel === cancel) {
         activeHistoryAnchorRestoration.current = null;
       }
     };
@@ -580,7 +508,8 @@ export function EntryExperience({
       }
       if (
         historyGeneration.current !== generation ||
-        viewportOwnership.current !== anchorViewportOwnership
+        (recoveryViewportOwnership !== null &&
+          viewportOwnership.current !== recoveryViewportOwnership)
       ) {
         cancel();
         return;
@@ -592,9 +521,17 @@ export function EntryExperience({
           if (
             !cancelled &&
             historyGeneration.current === generation &&
-            viewportOwnership.current === anchorViewportOwnership
+            (recoveryViewportOwnership === null ||
+              viewportOwnership.current === recoveryViewportOwnership)
           ) {
             restoreReadingAnchor(anchor);
+          }
+          if (
+            recoveryViewportOwnership === null &&
+            restoration !== null &&
+            activeHistoryAnchorRestoration.current === restoration
+          ) {
+            restoration.cancelOnViewportIntent = true;
           }
         });
       }
@@ -621,7 +558,11 @@ export function EntryExperience({
         }
       }
     }
-    activeHistoryAnchorRestoration.current = cancel;
+    restoration = {
+      cancel,
+      cancelOnViewportIntent: recoveryViewportOwnership !== null,
+    };
+    activeHistoryAnchorRestoration.current = restoration;
     restoreAfterLayout();
     void document.fonts.ready.then(restoreAfterLayout);
     return cancel;
@@ -656,11 +597,9 @@ export function EntryExperience({
       setHistoryState("loading");
       try {
         const freshWindow = currentRecovery
-          ? await rebuildHistoryWindow(
+          ? await loadEntryCenteredHistoryWindow(
               accessToken,
-              currentRecovery.anchorDate,
               currentRecovery.activeEntry,
-              currentRecovery.targetEntryCount,
               controller.signal,
             )
           : await loadHistoryEntries(
@@ -688,7 +627,7 @@ export function EntryExperience({
           pendingHistoryAnchor.current = {
             anchor: currentRecovery.navigationAnchor,
             trackRecoveryLayout: true,
-            viewportOwnership: recoveryViewportOwnership,
+            recoveryViewportOwnership,
           };
         }
         setAnchorDate(freshWindow.anchorDate);
@@ -836,7 +775,7 @@ export function EntryExperience({
     pendingHistoryAnchor.current = {
       anchor: captureReadingAnchor(),
       trackRecoveryLayout: false,
-      viewportOwnership: viewportOwnership.current,
+      recoveryViewportOwnership: null,
     };
     setAdjacentError(null);
     setAdjacentLoad(direction);
@@ -1063,13 +1002,11 @@ export function EntryExperience({
         ),
       );
       recovery = {
-        anchorDate: changed.owner_date,
         activeEntry: changed,
         navigationAnchor: {
           elementId: `entry-${changed.id}`,
           viewportTop: navigationViewportTop,
         },
-        targetEntryCount: HISTORY_PAGE_LIMIT,
       };
       committedHistoryRecovery.current = recovery;
       setOlderCursor(null);
@@ -1088,11 +1025,9 @@ export function EntryExperience({
       entryTimeReadingAnchor.current = null;
       rebuildRequest = beginHistoryRequest();
       const recoveryViewportOwnership = viewportOwnership.current;
-      const rebuilt = await rebuildHistoryWindow(
+      const rebuilt = await loadEntryCenteredHistoryWindow(
         accessToken,
-        recovery.anchorDate,
         recovery.activeEntry,
-        recovery.targetEntryCount,
         rebuildRequest.controller.signal,
       );
       if (
@@ -1107,7 +1042,7 @@ export function EntryExperience({
         pendingHistoryAnchor.current = {
           anchor: recovery.navigationAnchor,
           trackRecoveryLayout: true,
-          viewportOwnership: recoveryViewportOwnership,
+          recoveryViewportOwnership,
         };
       }
       setEntries(rebuilt.entries);
@@ -1166,11 +1101,9 @@ export function EntryExperience({
     const recoveryViewportOwnership = viewportOwnership.current;
     setHistoryRecoveryState("loading");
     try {
-      const rebuilt = await rebuildHistoryWindow(
+      const rebuilt = await loadEntryCenteredHistoryWindow(
         accessToken,
-        recovery.anchorDate,
         recovery.activeEntry,
-        recovery.targetEntryCount,
         request.controller.signal,
       );
       if (!ownsHistoryRequest(request.controller, request.generation)) {
@@ -1183,7 +1116,7 @@ export function EntryExperience({
         pendingHistoryAnchor.current = {
           anchor: recovery.navigationAnchor,
           trackRecoveryLayout: true,
-          viewportOwnership: recoveryViewportOwnership,
+          recoveryViewportOwnership,
         };
       }
       setEntries(rebuilt.entries);
