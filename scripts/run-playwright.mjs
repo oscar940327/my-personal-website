@@ -8,6 +8,7 @@ const playwrightCli = fileURLToPath(
   new URL("../node_modules/@playwright/test/cli.js", import.meta.url),
 );
 
+process.env.VITE_DIARY_API_URL = "/diary-api";
 process.env.VITE_SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_local_browser_test";
 process.env.VITE_SUPABASE_URL = "http://127.0.0.1:54321";

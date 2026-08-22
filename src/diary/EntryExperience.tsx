@@ -22,10 +22,12 @@ import {
   loadEntryHistoryWindow,
   loadEntryRevisions,
   loadHistoryEntries,
+  moveEntryToTrash,
   replaceOriginalContent,
   restoreEntryRevision,
 } from "./api";
 import { CalendarView } from "./CalendarView";
+import { TrashView } from "./TrashView";
 import {
   millisecondsUntilNextTaipeiMidnight,
   taipeiDateTimeInputValue,
@@ -250,6 +252,7 @@ type EntryCardProps = {
     readingAnchor: ReadingAnchor | null,
   ) => void;
   onEdit: (entry: EntryRecord) => void;
+  onMoveToTrash: (entry: EntryRecord) => void;
   onViewRevisions: (entry: EntryRecord) => void;
 };
 
@@ -257,6 +260,7 @@ function EntryCard({
   entry,
   onChangeTime,
   onEdit,
+  onMoveToTrash,
   onViewRevisions,
 }: EntryCardProps) {
   const actionsReadingAnchor = useRef<ReadingAnchor | null>(null);
@@ -316,6 +320,15 @@ function EntryCard({
           >
             View revision history
           </button>
+          <button
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              onMoveToTrash(entry);
+            }}
+            type="button"
+          >
+            Move to Trash
+          </button>
         </div>
       </details>
     </article>
@@ -328,9 +341,12 @@ export function EntryExperience({
 }: EntryExperienceProps) {
   const requestedAnchorDate = useRef(historyAnchorFromLocation());
   const usesTodayAnchor = requestedAnchorDate.current === undefined;
-  const [surface, setSurface] = useState<"history" | "calendar">("history");
+  const [surface, setSurface] = useState<"history" | "calendar" | "trash">(
+    "history",
+  );
   const [historyRequestVersion, setHistoryRequestVersion] = useState(0);
   const [calendarRequestVersion, setCalendarRequestVersion] = useState(0);
+  const [trashRequestVersion, setTrashRequestVersion] = useState(0);
   const [anchorDate, setAnchorDate] = useState("");
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
@@ -371,6 +387,12 @@ export function EntryExperience({
   const [entryTimeError, setEntryTimeError] = useState<string | null>(null);
   const [entryTimeConfirmation, setEntryTimeConfirmation] =
     useState<string | null>(null);
+  const [trashCandidate, setTrashCandidate] = useState<EntryRecord | null>(null);
+  const [trashState, setTrashState] = useState<"idle" | "saving">("idle");
+  const [trashError, setTrashError] = useState<string | null>(null);
+  const [trashConfirmation, setTrashConfirmation] = useState<string | null>(
+    null,
+  );
   const [revisionHistoryEntry, setRevisionHistoryEntry] =
     useState<EntryRecord | null>(null);
   const [revisionHistory, setRevisionHistory] =
@@ -1302,6 +1324,54 @@ export function EntryExperience({
     setSurface("history");
   }
 
+  function showTrash() {
+    claimViewportOwnership();
+    setSurface("trash");
+  }
+
+  function openTrashConfirmation(entry: EntryRecord) {
+    setTrashCandidate(entry);
+    setTrashError(null);
+    setTrashConfirmation(null);
+  }
+
+  function closeTrashConfirmation() {
+    if (trashState === "saving") {
+      return;
+    }
+    setTrashCandidate(null);
+    setTrashError(null);
+  }
+
+  async function confirmMoveToTrash() {
+    if (!trashCandidate) {
+      return;
+    }
+    const entry = trashCandidate;
+    setTrashState("saving");
+    setTrashError(null);
+    try {
+      await moveEntryToTrash(accessToken, entry.id);
+      setEntries((current) => current.filter((item) => item.id !== entry.id));
+      setSavedEntry((current) => current?.id === entry.id ? null : current);
+      setCalendarRequestVersion((current) => current + 1);
+      setTrashRequestVersion((current) => current + 1);
+      setTrashCandidate(null);
+      setTrashConfirmation("Entry moved to recoverable Trash.");
+    } catch {
+      setTrashError(
+        "Diary could not move this Entry to Trash. Nothing was permanently deleted.",
+      );
+    } finally {
+      setTrashState("idle");
+    }
+  }
+
+  function handleTrashRestore(restored: EntryRecord) {
+    setEntries((current) => mergeEntries(current, [restored]));
+    setCalendarRequestVersion((current) => current + 1);
+  }
+
   function retryHistory() {
     setHistoryState("loading");
     setHistoryRequestVersion((current) => current + 1);
@@ -1349,9 +1419,23 @@ export function EntryExperience({
         >
           Calendar
         </button>
+        <button
+          aria-pressed={surface === "trash"}
+          className="diary-secondary-action"
+          onClick={showTrash}
+          type="button"
+        >
+          Trash
+        </button>
       </nav>
 
-      {surface === "calendar" ? (
+      {surface === "trash" ? (
+        <TrashView
+          accessToken={accessToken}
+          onRestored={handleTrashRestore}
+          refreshVersion={trashRequestVersion}
+        />
+      ) : surface === "calendar" ? (
         <CalendarView
           accessToken={accessToken}
           onSelectDate={jumpToHistoryDate}
@@ -1435,6 +1519,7 @@ export function EntryExperience({
                           key={entry.id}
                           onChangeTime={openEntryTimeEditor}
                           onEdit={openEditor}
+                          onMoveToTrash={openTrashConfirmation}
                           onViewRevisions={(selectedEntry) =>
                             void openRevisionHistory(selectedEntry)
                           }
@@ -1502,6 +1587,12 @@ export function EntryExperience({
         </p>
       ) : null}
 
+      {trashConfirmation ? (
+        <p className="diary-save-confirmation" role="status">
+          {trashConfirmation}
+        </p>
+      ) : null}
+
       {savedEntryPreviewOpen && savedEntry ? (
         <div className="diary-composer-backdrop">
           <section
@@ -1529,10 +1620,62 @@ export function EntryExperience({
                 entry={savedEntry}
                 onChangeTime={openEntryTimeEditor}
                 onEdit={openEditor}
+                onMoveToTrash={openTrashConfirmation}
                 onViewRevisions={(selectedEntry) =>
                   void openRevisionHistory(selectedEntry)
                 }
               />
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {trashCandidate ? (
+        <div className="diary-composer-backdrop">
+          <section
+            aria-labelledby="diary-move-trash-title"
+            aria-modal="true"
+            className="diary-composer"
+            role="dialog"
+          >
+            <div className="diary-composer__heading">
+              <div>
+                <p className="diary-kicker">Recoverable removal</p>
+                <h2 id="diary-move-trash-title">Move Entry to Trash?</h2>
+              </div>
+              <button
+                aria-label="Close move to Trash confirmation"
+                className="diary-icon-action"
+                onClick={closeTrashConfirmation}
+                type="button"
+              >
+                &times;
+              </button>
+            </div>
+            <p>
+              This is recoverable and does not permanently delete any revision.
+            </p>
+            {trashError ? (
+              <p className="diary-auth-error" role="alert">
+                {trashError}
+              </p>
+            ) : null}
+            <div className="diary-composer__actions">
+              <button
+                className="diary-secondary-action"
+                disabled={trashState === "saving"}
+                onClick={closeTrashConfirmation}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={trashState === "saving"}
+                onClick={() => void confirmMoveToTrash()}
+                type="button"
+              >
+                {trashState === "saving" ? "Moving…" : "Move to Trash"}
+              </button>
             </div>
           </section>
         </div>
