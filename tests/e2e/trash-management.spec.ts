@@ -188,6 +188,154 @@ test("owner moves an Entry to recoverable Trash and restores it to its Taipei da
   ).toBeVisible();
 });
 
+test("restoring a distant Entry replaces the bounded History snapshot before pagination resumes", async ({
+  page,
+}) => {
+  await authenticateOwner(page, "distant-trash-restore-refresh-token");
+  const originalWindowEntry = {
+    created_at: "2050-04-05T15:00:00.000001Z",
+    current_revision_id: "current-window-revision-1",
+    entry_at: "2050-04-05T15:00:00.000001Z",
+    id: "entry-current-window",
+    original_content: "Entry from the original bounded History snapshot.",
+    owner_date: "2050-04-05",
+    processing_state: "pending",
+    revision_number: 1,
+  };
+  const freshWindowEntry = {
+    ...originalWindowEntry,
+    current_revision_id: "fresh-window-revision-1",
+    id: "entry-fresh-window",
+    original_content: "Entry from the fresh bounded History snapshot.",
+  };
+  const restoredEntry = {
+    created_at: "2040-01-02T03:04:05.000006Z",
+    current_revision_id: "distant-restored-revision-3",
+    entry_at: "2040-01-01T16:30:00.123456Z",
+    id: "entry-distant-restore",
+    original_content: "Distant restored Entry that belongs outside this window.",
+    owner_date: "2040-01-02",
+    processing_state: "pending",
+    revision_number: 3,
+  };
+  const trashEntry = {
+    ...restoredEntry,
+    revision_count: 3,
+    trashed_at: "2050-04-06T01:02:03.000004Z",
+  };
+  let restored = false;
+  let resolveFreshHistoryRequestStarted: (() => void) | undefined;
+  const freshHistoryRequestStarted = new Promise<void>((resolve) => {
+    resolveFreshHistoryRequestStarted = resolve;
+  });
+  let releaseFreshHistoryResponse: (() => void) | undefined;
+  const freshHistoryResponseReleased = new Promise<void>((resolve) => {
+    releaseFreshHistoryResponse = resolve;
+  });
+  const adjacentRequests: Array<{
+    cursor: string | null;
+    direction: string | null;
+  }> = [];
+
+  await page.route("**/entries/history**", async (route) => {
+    const url = new URL(route.request().url());
+    const cursor = url.searchParams.get("cursor");
+    const direction = url.searchParams.get("direction");
+    if (cursor || direction) {
+      adjacentRequests.push({ cursor, direction });
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2050-04-05",
+          groups: [],
+          newer_cursor: direction === "newer" ? null : "fresh-newer-cursor",
+          older_cursor: direction === "older" ? null : "fresh-older-cursor",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    if (!restored) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          anchor_date: "2050-04-05",
+          groups: [{ date: "2050-04-05", entries: [originalWindowEntry] }],
+          newer_cursor: "old-newer-cursor",
+          older_cursor: "old-older-cursor",
+        },
+        status: 200,
+      });
+      return;
+    }
+
+    resolveFreshHistoryRequestStarted?.();
+    await freshHistoryResponseReleased;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        anchor_date: "2050-04-05",
+        groups: [{ date: "2050-04-05", entries: [freshWindowEntry] }],
+        newer_cursor: "fresh-newer-cursor",
+        older_cursor: "fresh-older-cursor",
+      },
+      status: 200,
+    });
+  });
+  await page.route("**/trash/entry-distant-restore/restore", async (route) => {
+    restored = true;
+    await route.fulfill({
+      contentType: "application/json",
+      json: restoredEntry,
+      status: 200,
+    });
+  });
+  await page.route("**/diary-api/trash", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { entries: [trashEntry] },
+      status: 200,
+    });
+  });
+
+  await page.goto("diary.html?date=2050-04-05");
+  await expect(page.locator("#entry-entry-current-window")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load newer Entries" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load older Entries" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Trash" }).click();
+  const trashCard = page.locator("#trash-entry-entry-distant-restore");
+  await expect(trashCard).toContainText("2040-01-02");
+  await expect(trashCard).toContainText("3 revisions");
+  await trashCard.getByRole("button", { name: "Restore" }).click();
+
+  await expect(
+    page.getByText("Entry restored to 2040-01-02 (Asia/Taipei)."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "History" }).click();
+  await expect(page.getByText("Loading Diary history…")).toBeVisible();
+  await expect(page.locator("#entry-entry-current-window")).toHaveCount(0);
+  await expect(page.locator("#entry-entry-distant-restore")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Load newer Entries" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Load older Entries" }),
+  ).toHaveCount(0);
+
+  await freshHistoryRequestStarted;
+  releaseFreshHistoryResponse?.();
+  await expect(page.locator("#entry-entry-fresh-window")).toBeVisible();
+  await expect(page.locator("#entry-entry-distant-restore")).toHaveCount(0);
+  await page.getByRole("button", { name: "Load newer Entries" }).click();
+  await page.getByRole("button", { name: "Load older Entries" }).click();
+  expect(adjacentRequests).toEqual([
+    { cursor: "fresh-newer-cursor", direction: "newer" },
+    { cursor: "fresh-older-cursor", direction: "older" },
+  ]);
+});
+
 test("permanent deletion requires manually typed exact confirmation", async ({
   page,
 }) => {

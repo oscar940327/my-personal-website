@@ -1367,8 +1367,20 @@ export function EntryExperience({
     }
   }
 
-  function handleTrashRestore(restored: EntryRecord) {
-    setEntries((current) => mergeEntries(current, [restored]));
+  function handleTrashRestore(_restored: EntryRecord) {
+    retireHistoryOwnership(true);
+    pendingHistoryAnchor.current = null;
+    userScrolledHistory.current = false;
+    setAdjacentError(null);
+    setHistoryRecovery(null);
+    committedHistoryRecovery.current = null;
+    setHistoryRecoveryState("idle");
+    setAnchorDate("");
+    setEntries([]);
+    setOlderCursor(null);
+    setNewerCursor(null);
+    setHistoryState("loading");
+    setHistoryRequestVersion((current) => current + 1);
     setCalendarRequestVersion((current) => current + 1);
   }
 
