@@ -190,6 +190,48 @@ body {
   margin-top: 4rem;
 }
 
+.diary-trash {
+  margin-top: 4rem;
+}
+
+.diary-trash__list {
+  margin-top: 2.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.diary-trash__status {
+  margin: 1.5rem 0 0;
+  color: #3e5943;
+}
+
+.diary-trash-entry__actions {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.diary-trash-entry__actions .diary-secondary-action {
+  margin-top: 0;
+}
+
+.diary-danger-action {
+  min-height: 2.75rem;
+  padding: 0.7rem 1.1rem;
+  border: 1px solid #8b3f36;
+  border-radius: 999px;
+  background: #8b3f36;
+  color: #fff;
+  cursor: pointer;
+  font: 500 0.84rem "DM Mono", monospace;
+}
+
+.diary-danger-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .diary-calendar__heading,
 .diary-calendar__month-navigation {
   display: flex;
@@ -689,6 +731,11 @@ body {
 .diary-composer__form input:focus-visible,
 .diary-composer__actions button:focus-visible {
   outline: 3px solid rgb(77 122 85 / 35%);
+  outline-offset: 2px;
+}
+
+.diary-danger-action:focus-visible {
+  outline: 3px solid rgb(139 63 54 / 35%);
   outline-offset: 2px;
 }
 

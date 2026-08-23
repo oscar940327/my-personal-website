@@ -92,6 +92,15 @@ export type EntryRecord = {
   revision_number: number;
 };
 
+export type TrashEntryRecord = EntryRecord & {
+  revision_count: number;
+  trashed_at: string;
+};
+
+export type TrashListing = {
+  entries: TrashEntryRecord[];
+};
+
 export type EntryDateGroup = {
   date: string;
   entries: EntryRecord[];
@@ -189,6 +198,92 @@ export async function loadCalendarMonth(
     throw new Error("Diary could not load the calendar");
   }
   return (await response.json()) as CalendarMonth;
+}
+
+export async function loadTrashEntries(
+  accessToken: string,
+  signal: AbortSignal,
+): Promise<TrashListing> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/trash`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not load Trash");
+  }
+  return (await response.json()) as TrashListing;
+}
+
+export async function moveEntryToTrash(
+  accessToken: string,
+  entryId: string,
+): Promise<TrashEntryRecord> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/entries/${entryId}/trash`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      method: "POST",
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not move the Entry to Trash");
+  }
+  return (await response.json()) as TrashEntryRecord;
+}
+
+export async function restoreEntryFromTrash(
+  accessToken: string,
+  entryId: string,
+): Promise<EntryRecord> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/trash/${entryId}/restore`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      method: "POST",
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not restore the Entry from Trash");
+  }
+  return (await response.json()) as EntryRecord;
+}
+
+export async function permanentlyDeleteEntry(
+  accessToken: string,
+  entryId: string,
+  confirmation: "PERMANENTLY DELETE",
+): Promise<void> {
+  const { apiBaseUrl } = readDiaryPublicConfig();
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/trash/${entryId}`,
+    {
+      body: JSON.stringify({ confirmation }),
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "DELETE",
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Diary could not permanently delete the Entry");
+  }
 }
 
 export async function loadHistoryEntries(
