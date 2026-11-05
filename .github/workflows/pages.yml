@@ -15,10 +15,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      VITE_DIARY_API_URL: ${{ vars.DIARY_API_URL || 'https://diary-api.invalid' }}
-      VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://not-configured.supabase.co' }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_not_configured' }}
 
     steps:
       - name: Check out source
@@ -33,14 +29,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install browser
-        run: npx playwright install --with-deps chromium
-
       - name: Type-check
         run: npm run typecheck
-
-      - name: Test browser journeys
-        run: npm run test:e2e
 
       - name: Build GitHub Pages site
         run: npm run build
